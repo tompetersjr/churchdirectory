@@ -53,10 +53,32 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Get version from package.json
+      - name: Compute version
         id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+        run: |
+          BASE_VERSION=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')")
+          FULL_VERSION="${BASE_VERSION}.${{ github.run_number }}"
+          echo "version=$FULL_VERSION" >> $GITHUB_OUTPUT
         shell: bash
+
+      - name: Update tauri.conf.json version
+        run: |
+          node -e "
+            const fs = require('fs');
+            const config = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+            config.version = '${{ steps.version.outputs.version }}';
+            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(config, null, 2) + '\n');
+          "
+
+      - name: Update Cargo.toml version (Unix)
+        if: matrix.platform != 'windows-latest'
+        run: sed -i.bak 's/^version = ".*"/version = "${{ steps.version.outputs.version }}"/' src-tauri/Cargo.toml && rm src-tauri/Cargo.toml.bak
+
+      - name: Update Cargo.toml version (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          (Get-Content src-tauri/Cargo.toml) -replace '^version = ".*"', 'version = "${{ steps.version.outputs.version }}"' | Set-Content src-tauri/Cargo.toml
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0

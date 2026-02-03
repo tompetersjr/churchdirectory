@@ -1,6 +1,6 @@
 {
   "name": "dccdirectory",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Church Photo Directory Application",
   "type": "module",
   "scripts": {
