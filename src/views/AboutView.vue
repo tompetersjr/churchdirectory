@@ -1,8 +1,17 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
 import { open } from "@tauri-apps/plugin-shell";
+import { getVersion } from "@tauri-apps/api/app";
 
-const appVersion = ref("1.0.0");
+const appVersion = ref("...");
+
+onMounted(async () => {
+  try {
+    appVersion.value = await getVersion();
+  } catch {
+    appVersion.value = "dev";
+  }
+});
 
 function openUrl(url: string) {
   open(url);
