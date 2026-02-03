@@ -28,6 +28,7 @@
     {
       "identifier": "fs:scope",
       "allow": ["$APPDATA/**/*", "$RESOURCE/**/*", "**/*"]
-    }
+    },
+    "shell:allow-open"
   ]
 }
