@@ -18,7 +18,7 @@ onMounted(async () => {
   <div class="p-6 h-full overflow-y-auto">
     <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-6">About</h1>
 
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 max-w-2xl">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6">
       <!-- App Info -->
       <div class="text-center mb-8">
         <div class="w-20 h-20 mx-auto mb-4 bg-primary-100 dark:bg-primary-900/30 rounded-2xl flex items-center justify-center">
