@@ -103,6 +103,6 @@ jobs:
             **macOS:** Open the `.dmg` and drag the app to Applications. On first run, right-click and select "Open" to bypass Gatekeeper (unsigned app).
 
             **Linux:** Install the `.deb` package or run the `.AppImage` directly.
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}
