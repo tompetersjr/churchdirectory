@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, ref, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import { useFamiliesStore } from "../stores/families";
 import SearchBar from "../components/common/SearchBar.vue";
@@ -10,8 +10,16 @@ const familiesStore = useFamiliesStore();
 const showDeleteConfirm = ref(false);
 const familyToDelete = ref<number | null>(null);
 
-onMounted(() => {
-  familiesStore.fetchFamilies();
+onMounted(async () => {
+  await familiesStore.fetchFamilies();
+  if (familiesStore.lastViewedFamilyId !== null) {
+    await nextTick();
+    const el = document.querySelector(`[data-family-id="${familiesStore.lastViewedFamilyId}"]`);
+    if (el) {
+      el.scrollIntoView({ block: "center" });
+    }
+    familiesStore.lastViewedFamilyId = null;
+  }
 });
 
 function handleSearch(query: string) {
@@ -56,7 +64,7 @@ async function deleteFamily() {
 <template>
   <div class="p-6 h-full flex flex-col">
     <div class="flex items-center gap-4 mb-6">
-      <div class="flex-shrink-0">
+      <div class="shrink-0">
         <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Family Directory</h1>
         <p class="text-sm text-gray-500 dark:text-gray-400">
           <span v-if="familiesStore.searchQuery && familiesStore.filteredFamilies.length !== familiesStore.families.length">
@@ -76,7 +84,7 @@ async function deleteFamily() {
       </div>
       <button
         @click="createFamily"
-        class="flex-shrink-0 ml-auto px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2"
+        class="shrink-0 ml-auto px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2"
       >
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />

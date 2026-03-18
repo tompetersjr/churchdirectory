@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { useSettingsStore } from "../stores/settings";
 import type { PdfOptions } from "../types";
 
@@ -16,28 +16,40 @@ const error = ref<string | null>(null);
 const familyCount = ref(0);
 
 const options = ref<PdfOptions>({
-  layout: "grid",
-  page_size: "letter",
-  include_photos: true,
-  include_contact_info: true,
-  include_address: true,
-  include_cover: true,
-  include_toc: true,
   church_name: "",
-  church_logo_path: undefined,
+  cover_image_path: undefined,
+  cover_title_line1: undefined,
+  cover_title_line2: undefined,
+  cover_title_color: "#FFFFFF",
+  pastor_letter: undefined,
+  mission_statement: undefined,
+  first_page_markdown: undefined,
+  back_cover_image_path: undefined,
+  celebration_image_path: undefined,
 });
+
+// Image previews (base64 data URIs)
+const imagePreviews = ref<Record<string, string | null>>({});
+
+const imageSlots = [
+  { key: "cover_image", label: "Front Cover", description: "The front of the booklet" },
+  { key: "back_cover_image", label: "Back Cover", description: "The back of the booklet" },
+  { key: "celebration_image", label: "Celebrations", description: "Header image for birthdays & anniversaries" },
+];
 
 onMounted(async () => {
   await settingsStore.fetchSettings();
   options.value = {
-    ...options.value,
-    layout: settingsStore.settings.default_layout,
-    page_size: settingsStore.settings.page_size,
-    include_photos: settingsStore.settings.include_photos,
-    include_contact_info: settingsStore.settings.include_contact_info,
-    include_address: settingsStore.settings.include_address,
     church_name: settingsStore.settings.church_name,
-    church_logo_path: settingsStore.settings.church_logo_path,
+    cover_image_path: settingsStore.settings.cover_image_path,
+    cover_title_line1: settingsStore.settings.cover_title_line1,
+    cover_title_line2: settingsStore.settings.cover_title_line2,
+    cover_title_color: settingsStore.settings.cover_title_color || "#FFFFFF",
+    pastor_letter: settingsStore.settings.pastor_letter,
+    mission_statement: settingsStore.settings.mission_statement,
+    first_page_markdown: settingsStore.settings.first_page_markdown,
+    back_cover_image_path: settingsStore.settings.back_cover_image_path,
+    celebration_image_path: settingsStore.settings.celebration_image_path,
   };
 
   try {
@@ -45,11 +57,93 @@ onMounted(async () => {
   } catch (e) {
     console.error("Failed to get family count:", e);
   }
+
+  // Load existing image previews
+  for (const slot of imageSlots) {
+    const settingKey = `${slot.key}_path` as keyof PdfOptions;
+    const filename = options.value[settingKey];
+    if (filename) {
+      await loadImagePreview(slot.key, filename);
+    }
+  }
 });
+
+async function loadImagePreview(imageName: string, filename: string) {
+  try {
+    const base64 = await invoke<string>("get_photo_base64", {
+      photoType: "directory",
+      filename,
+    });
+    imagePreviews.value[imageName] = base64;
+  } catch (e) {
+    imagePreviews.value[imageName] = null;
+  }
+}
+
+async function uploadImage(imageName: string) {
+  const filePath = await open({
+    multiple: false,
+    filters: [
+      {
+        name: "Images",
+        extensions: ["png", "jpg", "jpeg", "webp"],
+      },
+    ],
+  });
+
+  if (!filePath || typeof filePath !== "string") return;
+
+  try {
+    await settingsStore.setDirectoryImage(filePath, imageName);
+    const settingKey = `${imageName}_path` as keyof PdfOptions;
+    const savedPath = settingsStore.settings[settingKey as keyof typeof settingsStore.settings] as string;
+    (options.value as Record<string, unknown>)[settingKey] = savedPath;
+    if (savedPath) {
+      await loadImagePreview(imageName, savedPath);
+    }
+  } catch (e) {
+    error.value = `Failed to upload image: ${e}`;
+  }
+}
+
+async function removeImage(imageName: string) {
+  const settingKey = `${imageName}_path` as keyof PdfOptions;
+  (options.value as Record<string, unknown>)[settingKey] = undefined;
+  imagePreviews.value[imageName] = null;
+  await settingsStore.saveSettings({ [settingKey]: undefined });
+}
+
+async function saveCoverTitle() {
+  try {
+    await settingsStore.saveSettings({
+      cover_title_line1: options.value.cover_title_line1,
+      cover_title_line2: options.value.cover_title_line2,
+      cover_title_color: options.value.cover_title_color,
+    });
+  } catch (e) {
+    error.value = `Failed to save cover title: ${e}`;
+  }
+}
+
+async function savePastorLetter() {
+  try {
+    await settingsStore.saveSettings({ pastor_letter: options.value.pastor_letter });
+  } catch (e) {
+    error.value = `Failed to save: ${e}`;
+  }
+}
+
+async function saveMissionStatement() {
+  try {
+    await settingsStore.saveSettings({ mission_statement: options.value.mission_statement });
+  } catch (e) {
+    error.value = `Failed to save: ${e}`;
+  }
+}
 
 async function generatePdf() {
   const outputPath = await save({
-    defaultPath: "church-directory.pdf",
+    defaultPath: "church-directory-booklet.pdf",
     filters: [
       {
         name: "PDF Files",
@@ -90,130 +184,166 @@ async function generatePdf() {
     </div>
 
     <div v-else>
-      <div class="mb-6">
-        <p class="text-gray-600 dark:text-gray-400">
-          Generate a PDF directory with <strong class="dark:text-gray-200">{{ familyCount }}</strong> families.
+      <!-- Booklet Info -->
+      <div class="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+        <p class="text-sm text-blue-700 dark:text-blue-300">
+          Generates a saddle-stitched booklet on 8.5" x 14" (US Legal) paper with <strong>{{ familyCount }}</strong> families.
+          Pages are imposed for duplex printing and folding.
+          Images should be 7" x 8.5" (portrait) or a 7:8.5 aspect ratio for best results.
         </p>
       </div>
 
-      <!-- Church Name -->
+      <!-- Directory Images -->
       <div class="mb-6">
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Church Name
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+          Booklet Images
         </label>
-        <input
-          v-model="options.church_name"
-          type="text"
-          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 dark:text-gray-100"
-          placeholder="Enter church name"
-        />
-      </div>
+        <div class="grid grid-cols-3 gap-3">
+          <div
+            v-for="slot in imageSlots"
+            :key="slot.key"
+            class="p-2 border border-gray-200 dark:border-gray-700 rounded-lg"
+          >
+            <!-- Thumbnail -->
+            <div class="w-full aspect-[7/8.5] rounded overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center mb-2">
+              <img
+                v-if="imagePreviews[slot.key]"
+                :src="imagePreviews[slot.key]!"
+                class="w-full h-full object-cover"
+                alt=""
+              />
+              <svg v-else class="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
 
-      <!-- Layout Options -->
-      <div class="mb-6">
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Layout</label>
-        <div class="grid grid-cols-2 gap-4">
-          <label
-            class="flex items-center gap-3 p-4 border rounded-lg cursor-pointer"
-            :class="
-              options.layout === 'grid'
-                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30'
-                : 'dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
-            "
-          >
-            <input
-              v-model="options.layout"
-              type="radio"
-              value="grid"
-              class="sr-only"
-            />
-            <div class="flex-1">
-              <p class="font-medium dark:text-gray-200">Grid</p>
-              <p class="text-sm text-gray-500 dark:text-gray-400">2 columns per page</p>
+            <!-- Label & Description -->
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ slot.label }}</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">{{ slot.description }}</p>
+
+            <!-- Actions -->
+            <div class="flex gap-2">
+              <button
+                @click="uploadImage(slot.key)"
+                class="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+              >
+                {{ imagePreviews[slot.key] ? 'Change' : 'Upload' }}
+              </button>
+              <button
+                v-if="imagePreviews[slot.key]"
+                @click="removeImage(slot.key)"
+                class="px-3 py-1.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+              >
+                Remove
+              </button>
             </div>
-          </label>
-          <label
-            class="flex items-center gap-3 p-4 border rounded-lg cursor-pointer"
-            :class="
-              options.layout === 'list'
-                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/30'
-                : 'dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
-            "
-          >
-            <input
-              v-model="options.layout"
-              type="radio"
-              value="list"
-              class="sr-only"
-            />
-            <div class="flex-1">
-              <p class="font-medium dark:text-gray-200">List</p>
-              <p class="text-sm text-gray-500 dark:text-gray-400">1 column per page</p>
-            </div>
-          </label>
+          </div>
         </div>
       </div>
 
-      <!-- Page Size -->
+      <!-- Cover Title -->
       <div class="mb-6">
         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          Page Size
+          Cover Title
         </label>
-        <select
-          v-model="options.page_size"
-          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 dark:text-gray-100"
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+          Two lines of title text displayed on the front cover. The current month and year will be added automatically as a third line.
+        </p>
+        <input
+          v-model="options.cover_title_line1"
+          type="text"
+          placeholder="Line 1 (e.g. church name)"
+          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 mb-2"
+        />
+        <input
+          v-model="options.cover_title_line2"
+          type="text"
+          placeholder="Line 2 (e.g. Photo Directory)"
+          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+        />
+        <div class="mt-3 flex items-center gap-3">
+          <label class="text-sm text-gray-600 dark:text-gray-400">Text Color</label>
+          <div class="relative">
+            <input
+              v-model="options.cover_title_color"
+              type="color"
+              class="sr-only peer"
+              :id="'cover-color-picker'"
+            />
+            <label
+              :for="'cover-color-picker'"
+              class="flex items-center gap-2 cursor-pointer px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+            >
+              <span
+                class="w-6 h-6 rounded-full border-2 border-gray-300 dark:border-gray-500 shadow-inner"
+                :style="{ backgroundColor: options.cover_title_color || '#FFFFFF' }"
+              ></span>
+              <span class="text-sm text-gray-700 dark:text-gray-300 font-mono uppercase">{{ options.cover_title_color || '#FFFFFF' }}</span>
+            </label>
+          </div>
+          <div class="flex gap-1">
+            <button
+              v-for="preset in ['#FFFFFF', '#000000', '#1E3A5F', '#8B4513', '#2F4F2F', '#4A0E2E']"
+              :key="preset"
+              @click="options.cover_title_color = preset"
+              class="w-6 h-6 rounded-full border-2 transition-all"
+              :class="options.cover_title_color === preset ? 'border-primary-500 scale-110' : 'border-gray-300 dark:border-gray-500 hover:scale-105'"
+              :style="{ backgroundColor: preset }"
+              :title="preset"
+            ></button>
+          </div>
+        </div>
+        <button
+          v-if="options.cover_title_line1 || options.cover_title_line2"
+          @click="saveCoverTitle"
+          class="mt-3 px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700"
         >
-          <option value="letter">Letter (8.5" x 11")</option>
-          <option value="a4">A4 (210mm x 297mm)</option>
-        </select>
+          Save
+        </button>
       </div>
 
-      <!-- Content Options -->
+      <!-- First Inside Page -->
       <div class="mb-6">
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Content Options
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+          First Inside Page
         </label>
-        <div class="space-y-3">
-          <label class="flex items-center gap-3">
-            <input
-              v-model="options.include_cover"
-              type="checkbox"
-              class="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500"
-            />
-            <span class="text-sm text-gray-700 dark:text-gray-300">Include cover page</span>
+
+        <!-- Letter From the Pastor -->
+        <div class="mb-4">
+          <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+            Letter From the Pastor
           </label>
-          <label class="flex items-center gap-3">
-            <input
-              v-model="options.include_toc"
-              type="checkbox"
-              class="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500"
-            />
-            <span class="text-sm text-gray-700 dark:text-gray-300">Include table of contents</span>
+          <textarea
+            v-model="options.pastor_letter"
+            rows="6"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          ></textarea>
+          <button
+            v-if="options.pastor_letter"
+            @click="savePastorLetter"
+            class="mt-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700"
+          >
+            Save
+          </button>
+        </div>
+
+        <!-- Mission Statement -->
+        <div>
+          <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+            Mission Statement
           </label>
-          <label class="flex items-center gap-3">
-            <input
-              v-model="options.include_photos"
-              type="checkbox"
-              class="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500"
-            />
-            <span class="text-sm text-gray-700 dark:text-gray-300">Include photos</span>
-          </label>
-          <label class="flex items-center gap-3">
-            <input
-              v-model="options.include_address"
-              type="checkbox"
-              class="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500"
-            />
-            <span class="text-sm text-gray-700 dark:text-gray-300">Include addresses</span>
-          </label>
-          <label class="flex items-center gap-3">
-            <input
-              v-model="options.include_contact_info"
-              type="checkbox"
-              class="w-4 h-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded focus:ring-primary-500"
-            />
-            <span class="text-sm text-gray-700 dark:text-gray-300">Include contact information</span>
-          </label>
+          <textarea
+            v-model="options.mission_statement"
+            rows="4"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+          ></textarea>
+          <button
+            v-if="options.mission_statement"
+            @click="saveMissionStatement"
+            class="mt-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700"
+          >
+            Save
+          </button>
         </div>
       </div>
 
@@ -235,7 +365,7 @@ async function generatePdf() {
         <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
-        {{ loading ? "Generating..." : "Generate PDF" }}
+        {{ loading ? "Generating..." : "Generate Booklet PDF" }}
       </button>
     </div>
   </div>

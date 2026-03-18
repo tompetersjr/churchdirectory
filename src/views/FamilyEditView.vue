@@ -22,7 +22,6 @@ const initialData = ref<Partial<Family>>({
   state: "",
   zip: "",
   phone: "",
-  email: "",
   notes: "",
 });
 

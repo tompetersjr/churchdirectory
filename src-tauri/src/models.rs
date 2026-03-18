@@ -11,9 +11,16 @@ pub struct Family {
     pub state: Option<String>,
     pub zip: Option<String>,
     pub phone: Option<String>,
-    pub email: Option<String>,
     pub photo_path: Option<String>,
     pub notes: Option<String>,
+    pub children: Option<String>,
+    pub alt_address: Option<String>,
+    pub alt_city: Option<String>,
+    pub alt_state: Option<String>,
+    pub alt_zip: Option<String>,
+    pub directory_adults: Option<String>,
+    pub directory_children: Option<String>,
+    pub include_photo_in_directory: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -28,9 +35,21 @@ pub struct FamilyInput {
     pub state: Option<String>,
     pub zip: Option<String>,
     pub phone: Option<String>,
-    pub email: Option<String>,
     pub photo_path: Option<String>,
     pub notes: Option<String>,
+    pub children: Option<String>,
+    pub alt_address: Option<String>,
+    pub alt_city: Option<String>,
+    pub alt_state: Option<String>,
+    pub alt_zip: Option<String>,
+    pub directory_adults: Option<String>,
+    pub directory_children: Option<String>,
+    #[serde(default = "default_include_photo")]
+    pub include_photo_in_directory: bool,
+}
+
+fn default_include_photo() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,9 +62,25 @@ pub struct FamilyUpdate {
     pub state: Option<String>,
     pub zip: Option<String>,
     pub phone: Option<String>,
-    pub email: Option<String>,
-    pub photo_path: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_nullable_field")]
+    pub photo_path: Option<Option<String>>,
     pub notes: Option<String>,
+    pub children: Option<String>,
+    pub alt_address: Option<String>,
+    pub alt_city: Option<String>,
+    pub alt_state: Option<String>,
+    pub alt_zip: Option<String>,
+    pub directory_adults: Option<String>,
+    pub directory_children: Option<String>,
+    pub include_photo_in_directory: Option<bool>,
+}
+
+fn deserialize_nullable_field<'de, D>(deserializer: D) -> Result<Option<Option<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // If the field is present, deserialize its value (which may be null)
+    Ok(Some(Option::deserialize(deserializer)?))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -113,6 +148,19 @@ pub struct Settings {
     pub include_photos: bool,
     pub include_contact_info: bool,
     pub include_address: bool,
+    pub cover_image_path: Option<String>,
+    pub cover_title_line1: Option<String>,
+    pub cover_title_line2: Option<String>,
+    pub cover_title_color: Option<String>,
+    pub pastor_letter: Option<String>,
+    pub mission_statement: Option<String>,
+    pub first_page_markdown: Option<String>,
+    pub back_cover_image_path: Option<String>,
+    pub celebration_image_path: Option<String>,
+    pub church_address: Option<String>,
+    pub church_phone: Option<String>,
+    pub church_email: Option<String>,
+    pub church_website: Option<String>,
 }
 
 fn default_theme() -> String {
@@ -130,6 +178,19 @@ impl Default for Settings {
             include_photos: true,
             include_contact_info: true,
             include_address: true,
+            cover_image_path: None,
+            cover_title_line1: None,
+            cover_title_line2: None,
+            cover_title_color: Some("#FFFFFF".to_string()),
+            pastor_letter: None,
+            mission_statement: None,
+            first_page_markdown: None,
+            back_cover_image_path: None,
+            celebration_image_path: None,
+            church_address: None,
+            church_phone: None,
+            church_email: None,
+            church_website: None,
         }
     }
 }
@@ -179,15 +240,56 @@ pub struct ImportResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PdfOptions {
-    pub layout: String,
-    pub page_size: String,
-    pub include_photos: bool,
-    pub include_contact_info: bool,
-    pub include_address: bool,
-    pub include_cover: bool,
-    pub include_toc: bool,
     pub church_name: String,
-    pub church_logo_path: Option<String>,
+    pub cover_image_path: Option<String>,
+    pub cover_title_line1: Option<String>,
+    pub cover_title_line2: Option<String>,
+    pub cover_title_color: Option<String>,
+    pub pastor_letter: Option<String>,
+    pub mission_statement: Option<String>,
+    pub first_page_markdown: Option<String>,
+    pub back_cover_image_path: Option<String>,
+    pub celebration_image_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Leadership {
+    pub id: i64,
+    pub ministry: String,
+    pub names: String,
+    pub sort_order: i32,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LeadershipInput {
+    pub ministry: String,
+    pub names: String,
+    #[serde(default)]
+    pub sort_order: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Staff {
+    pub id: i64,
+    pub name: String,
+    pub title: String,
+    pub role: String,
+    pub photo_path: Option<String>,
+    pub sort_order: i32,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StaffInput {
+    pub name: String,
+    #[serde(default)]
+    pub title: String,
+    pub role: String,
+    #[serde(default)]
+    pub sort_order: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

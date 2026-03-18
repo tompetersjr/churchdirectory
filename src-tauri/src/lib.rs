@@ -38,12 +38,24 @@ pub fn run() {
             commands::create_family,
             commands::update_family,
             commands::delete_family,
+            commands::reorder_members,
             // Member commands
             commands::get_members,
             commands::get_member,
             commands::create_member,
             commands::update_member,
             commands::delete_member,
+            // Staff commands
+            commands::get_staff,
+            commands::create_staff,
+            commands::update_staff,
+            commands::delete_staff,
+            commands::save_staff_photo,
+            // Leadership commands
+            commands::get_leadership,
+            commands::create_leadership,
+            commands::update_leadership,
+            commands::delete_leadership,
             // Settings commands
             commands::get_settings,
             commands::save_settings,
@@ -54,6 +66,7 @@ pub fn run() {
             photos::save_family_photo,
             photos::save_member_photo,
             photos::save_church_logo,
+            photos::save_directory_image,
             photos::delete_photo,
             photos::get_photo_path,
             photos::get_photo_base64,

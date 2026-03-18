@@ -9,7 +9,7 @@ Built with [Tauri 2](https://tauri.app/), [Vue 3](https://vuejs.org/), and [Rust
 - **Family & Member Management** - Add, edit, and organize families and their members
 - **Photo Management** - Upload family photos and crop individual member avatars
 - **PDF Generation** - Create print-ready directories with customizable layouts
-- **Excel Import** - Bulk import families from Excel spreadsheets
+- **Data Import** - Bulk import families from Servant Keeper exports (CSV or Excel)
 - **Backup & Restore** - Full backup and restore of all data and photos
 - **Dark Mode** - System, light, and dark theme support
 - **Cross-Platform** - Runs on Windows, macOS, and Linux
@@ -111,6 +111,35 @@ dccdirectory/
 - printpdf (PDF generation)
 - image (image processing)
 - calamine (Excel parsing)
+- csv (CSV parsing)
+
+## Data Import
+
+The import feature is designed around **Servant Keeper** exports. Export your directory data as a CSV or Excel file with the following fields:
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| Family ID | Yes | Used to group individuals into families |
+| Last Name | Yes | Also used as the Family Name if no Family Name column is present |
+| First Name | Yes | |
+| Family Name | No | Defaults to Last Name if missing |
+| Mailing Name | No | e.g., "Mr. & Mrs. John Smith" |
+| Address | No | |
+| City | No | |
+| State | No | |
+| Zip Code | No | |
+| Phone | No | Family/home phone number |
+| Cell Phone | No | Individual cell phone |
+| E-Mail | No | |
+| Birth Date | No | |
+| Wedding Date | No | |
+| Children | No | Comma-separated list of children's names. Stored on the family record and used for automatic "Child" role detection. |
+| Alt Address | No | |
+| Alt City | No | |
+| Alt State | No | |
+| Alt Zip Code | No | |
+
+Families are built by grouping individuals that share the same **Family ID**. The **Children** field is a comma-separated list of children's names that is stored on the family record. Members whose first name appears in this list are automatically assigned the "Child" role.
 
 ## Data Storage
 

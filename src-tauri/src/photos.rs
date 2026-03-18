@@ -69,6 +69,20 @@ pub fn save_church_logo(
 }
 
 #[tauri::command]
+pub fn save_directory_image(
+    app_handle: AppHandle,
+    file_path: String,
+    image_name: String,
+) -> Result<String, String> {
+    let photos_dir = Database::get_photos_dir(&app_handle);
+    let directory_dir = photos_dir.join("directory");
+    fs::create_dir_all(&directory_dir).map_err(|e| e.to_string())?;
+
+    let saved_path = process_and_save_image(&file_path, &directory_dir, &image_name)?;
+    Ok(saved_path)
+}
+
+#[tauri::command]
 pub fn delete_photo(
     app_handle: AppHandle,
     photo_path: String,
@@ -214,12 +228,23 @@ pub fn get_photo_base64(
     Ok(format!("data:{};base64,{}", mime_type, base64_data))
 }
 
+pub fn process_and_save_image_public(
+    source_path: &str,
+    dest_dir: &Path,
+    prefix: &str,
+) -> Result<String, String> {
+    process_and_save_image(source_path, dest_dir, prefix)
+}
+
 fn process_and_save_image(
     source_path: &str,
     dest_dir: &Path,
     prefix: &str,
 ) -> Result<String, String> {
-    let img = image::open(source_path).map_err(|e| format!("Failed to open image: {}", e))?;
+    // Read bytes first, then detect format from content (not extension) for robustness
+    let data = fs::read(source_path).map_err(|e| format!("Failed to read image file: {}", e))?;
+    let img = image::load_from_memory(&data)
+        .map_err(|e| format!("Failed to decode image: {}", e))?;
 
     let (width, height) = img.dimensions();
     let resized = if width > MAX_IMAGE_SIZE || height > MAX_IMAGE_SIZE {

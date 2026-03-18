@@ -12,6 +12,12 @@ const defaultSettings: Settings = {
   include_photos: true,
   include_contact_info: true,
   include_address: true,
+  cover_image_path: undefined,
+  cover_title_line1: undefined,
+  cover_title_line2: undefined,
+  cover_title_color: "#FFFFFF",
+  first_page_markdown: undefined,
+  back_cover_image_path: undefined,
 };
 
 function applyTheme(theme: Theme) {
@@ -84,6 +90,22 @@ export const useSettingsStore = defineStore("settings", () => {
     }
   }
 
+  async function setDirectoryImage(filePath: string, imageName: string) {
+    loading.value = true;
+    error.value = null;
+    try {
+      const savedPath = await invoke<string>("save_directory_image", { filePath, imageName });
+      const settingKey = `${imageName}_path` as keyof Settings;
+      (settings.value as Record<string, unknown>)[settingKey] = savedPath;
+      await saveSettings(settings.value);
+    } catch (e) {
+      error.value = String(e);
+      throw e;
+    } finally {
+      loading.value = false;
+    }
+  }
+
   function resetToDefaults() {
     settings.value = { ...defaultSettings };
   }
@@ -105,6 +127,7 @@ export const useSettingsStore = defineStore("settings", () => {
     fetchSettings,
     saveSettings,
     setChurchLogo,
+    setDirectoryImage,
     resetToDefaults,
     initTheme,
   };

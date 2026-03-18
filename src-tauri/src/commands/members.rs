@@ -174,3 +174,24 @@ pub fn delete_member(db: State<'_, Database>, id: i64) -> Result<(), String> {
 
     Ok(())
 }
+
+#[tauri::command]
+pub fn reorder_members(db: State<'_, Database>, member_ids: Vec<i64>) -> Result<(), String> {
+    let conn = db.conn.lock().map_err(|e| e.to_string())?;
+
+    conn.execute_batch("BEGIN").map_err(|e| e.to_string())?;
+
+    for (index, id) in member_ids.iter().enumerate() {
+        if let Err(e) = conn.execute(
+            "UPDATE members SET sort_order = ?, updated_at = datetime('now') WHERE id = ?",
+            params![index as i32, id],
+        ) {
+            let _ = conn.execute_batch("ROLLBACK");
+            return Err(e.to_string());
+        }
+    }
+
+    conn.execute_batch("COMMIT").map_err(|e| e.to_string())?;
+
+    Ok(())
+}

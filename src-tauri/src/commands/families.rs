@@ -9,8 +9,9 @@ pub fn get_families(db: State<'_, Database>) -> Result<Vec<Family>, String> {
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, family_id, name, mailing_name, address, city, state, zip, phone, email,
-                    photo_path, notes, created_at, updated_at
+            "SELECT id, family_id, name, mailing_name, address, city, state, zip, phone,
+                    photo_path, notes, children, alt_address, alt_city, alt_state, alt_zip,
+                    directory_adults, directory_children, include_photo_in_directory, created_at, updated_at
              FROM families ORDER BY name",
         )
         .map_err(|e| e.to_string())?;
@@ -27,11 +28,18 @@ pub fn get_families(db: State<'_, Database>) -> Result<Vec<Family>, String> {
                 state: row.get(6)?,
                 zip: row.get(7)?,
                 phone: row.get(8)?,
-                email: row.get(9)?,
-                photo_path: row.get(10)?,
-                notes: row.get(11)?,
-                created_at: row.get(12)?,
-                updated_at: row.get(13)?,
+                photo_path: row.get(9)?,
+                notes: row.get(10)?,
+                children: row.get(11)?,
+                alt_address: row.get(12)?,
+                alt_city: row.get(13)?,
+                alt_state: row.get(14)?,
+                alt_zip: row.get(15)?,
+                directory_adults: row.get(16)?,
+                directory_children: row.get(17)?,
+                include_photo_in_directory: row.get(18)?,
+                created_at: row.get(19)?,
+                updated_at: row.get(20)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -47,8 +55,9 @@ pub fn get_family(db: State<'_, Database>, id: i64) -> Result<FamilyWithMembers,
 
     let family = conn
         .query_row(
-            "SELECT id, family_id, name, mailing_name, address, city, state, zip, phone, email,
-                    photo_path, notes, created_at, updated_at
+            "SELECT id, family_id, name, mailing_name, address, city, state, zip, phone,
+                    photo_path, notes, children, alt_address, alt_city, alt_state, alt_zip,
+                    directory_adults, directory_children, include_photo_in_directory, created_at, updated_at
              FROM families WHERE id = ?",
             params![id],
             |row| {
@@ -62,11 +71,18 @@ pub fn get_family(db: State<'_, Database>, id: i64) -> Result<FamilyWithMembers,
                     state: row.get(6)?,
                     zip: row.get(7)?,
                     phone: row.get(8)?,
-                    email: row.get(9)?,
-                    photo_path: row.get(10)?,
-                    notes: row.get(11)?,
-                    created_at: row.get(12)?,
-                    updated_at: row.get(13)?,
+                    photo_path: row.get(9)?,
+                    notes: row.get(10)?,
+                    children: row.get(11)?,
+                    alt_address: row.get(12)?,
+                    alt_city: row.get(13)?,
+                    alt_state: row.get(14)?,
+                    alt_zip: row.get(15)?,
+                    directory_adults: row.get(16)?,
+                    directory_children: row.get(17)?,
+                    include_photo_in_directory: row.get(18)?,
+                    created_at: row.get(19)?,
+                    updated_at: row.get(20)?,
                 })
             },
         )
@@ -111,8 +127,8 @@ pub fn create_family(db: State<'_, Database>, family: FamilyInput) -> Result<i64
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
     conn.execute(
-        "INSERT INTO families (family_id, name, mailing_name, address, city, state, zip, phone, email, photo_path, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO families (family_id, name, mailing_name, address, city, state, zip, phone, photo_path, notes, children, alt_address, alt_city, alt_state, alt_zip, directory_adults, directory_children, include_photo_in_directory)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         params![
             family.family_id,
             family.name,
@@ -122,9 +138,16 @@ pub fn create_family(db: State<'_, Database>, family: FamilyInput) -> Result<i64
             family.state,
             family.zip,
             family.phone,
-            family.email,
             family.photo_path,
             family.notes,
+            family.children,
+            family.alt_address,
+            family.alt_city,
+            family.alt_state,
+            family.alt_zip,
+            family.directory_adults,
+            family.directory_children,
+            family.include_photo_in_directory,
         ],
     )
     .map_err(|e| e.to_string())?;
@@ -171,19 +194,47 @@ pub fn update_family(db: State<'_, Database>, id: i64, family: FamilyUpdate) -> 
         updates.push("phone = ?");
         values.push(Box::new(v.clone()));
     }
-    if let Some(ref v) = family.email {
-        updates.push("email = ?");
-        values.push(Box::new(v.clone()));
-    }
     if let Some(ref v) = family.photo_path {
         updates.push("photo_path = ?");
         values.push(Box::new(v.clone()));
     }
+
     if let Some(ref v) = family.notes {
         updates.push("notes = ?");
         values.push(Box::new(v.clone()));
     }
-
+    if let Some(ref v) = family.children {
+        updates.push("children = ?");
+        values.push(Box::new(v.clone()));
+    }
+    if let Some(ref v) = family.alt_address {
+        updates.push("alt_address = ?");
+        values.push(Box::new(v.clone()));
+    }
+    if let Some(ref v) = family.alt_city {
+        updates.push("alt_city = ?");
+        values.push(Box::new(v.clone()));
+    }
+    if let Some(ref v) = family.alt_state {
+        updates.push("alt_state = ?");
+        values.push(Box::new(v.clone()));
+    }
+    if let Some(ref v) = family.alt_zip {
+        updates.push("alt_zip = ?");
+        values.push(Box::new(v.clone()));
+    }
+    if let Some(ref v) = family.directory_adults {
+        updates.push("directory_adults = ?");
+        values.push(Box::new(v.clone()));
+    }
+    if let Some(ref v) = family.directory_children {
+        updates.push("directory_children = ?");
+        values.push(Box::new(v.clone()));
+    }
+    if let Some(v) = family.include_photo_in_directory {
+        updates.push("include_photo_in_directory = ?");
+        values.push(Box::new(v));
+    }
     if updates.is_empty() {
         return Ok(());
     }

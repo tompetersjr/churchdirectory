@@ -28,8 +28,9 @@ tauri-plugin-process = "2"
 # Database
 rusqlite = { version = "0.32", features = ["bundled"] }
 
-# XLSX Import
+# XLSX/CSV Import
 calamine = "0.26"
+csv = "1"
 
 # Image processing
 image = "0.25"

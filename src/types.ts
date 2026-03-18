@@ -8,9 +8,16 @@ export interface Family {
   state?: string;
   zip?: string;
   phone?: string;
-  email?: string;
   photo_path?: string;
   notes?: string;
+  children?: string;
+  alt_address?: string;
+  alt_city?: string;
+  alt_state?: string;
+  alt_zip?: string;
+  directory_adults?: string;
+  directory_children?: string;
+  include_photo_in_directory: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +41,26 @@ export interface Member {
 
 export interface FamilyWithMembers extends Family {
   members: Member[];
+}
+
+export interface Staff {
+  id: number;
+  name: string;
+  title: string;
+  role: "pastor" | "elder" | "staff";
+  photo_path?: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Leadership {
+  id: number;
+  ministry: string;
+  names: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ImportPreview {
@@ -85,6 +112,19 @@ export interface Settings {
   include_photos: boolean;
   include_contact_info: boolean;
   include_address: boolean;
+  cover_image_path?: string;
+  cover_title_line1?: string;
+  cover_title_line2?: string;
+  cover_title_color?: string;
+  pastor_letter?: string;
+  mission_statement?: string;
+  first_page_markdown?: string;
+  back_cover_image_path?: string;
+  celebration_image_path?: string;
+  church_address?: string;
+  church_phone?: string;
+  church_email?: string;
+  church_website?: string;
 }
 
 export interface BackupManifest {
@@ -96,17 +136,15 @@ export interface BackupManifest {
   photo_count: number;
 }
 
-export type PdfLayout = "grid" | "list";
-export type PageSize = "letter" | "a4";
-
 export interface PdfOptions {
-  layout: PdfLayout;
-  page_size: PageSize;
-  include_photos: boolean;
-  include_contact_info: boolean;
-  include_address: boolean;
-  include_cover: boolean;
-  include_toc: boolean;
   church_name: string;
-  church_logo_path?: string;
+  cover_image_path?: string;
+  cover_title_line1?: string;
+  cover_title_line2?: string;
+  cover_title_color?: string;
+  pastor_letter?: string;
+  mission_statement?: string;
+  first_page_markdown?: string;
+  back_cover_image_path?: string;
+  celebration_image_path?: string;
 }

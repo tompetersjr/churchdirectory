@@ -87,7 +87,7 @@ pub fn create_backup(
                 let relative_path = path
                     .strip_prefix(&photos_dir)
                     .map_err(|e| e.to_string())?;
-                let archive_path = format!("photos/{}", relative_path.to_string_lossy());
+                let archive_path = format!("photos/{}", relative_path.to_string_lossy().replace('\\', "/"));
 
                 let mut file = File::open(path).map_err(|e| e.to_string())?;
                 let mut contents = Vec::new();
@@ -185,29 +185,35 @@ pub fn restore_backup(
 
                 let mut stmt = source_conn
                     .prepare(
-                        "SELECT family_id, name, address, city, state, zip, phone, email, photo_path, notes FROM families",
+                        "SELECT family_id, name, mailing_name, address, city, state, zip, phone, email, photo_path, notes, children, alt_address, alt_city, alt_state, alt_zip FROM families",
                     )
                     .map_err(|e| e.to_string())?;
 
                 let families = stmt
                     .query_map([], |row| {
                         Ok((
-                            row.get::<_, String>(0)?,
-                            row.get::<_, String>(1)?,
-                            row.get::<_, Option<String>>(2)?,
-                            row.get::<_, Option<String>>(3)?,
-                            row.get::<_, Option<String>>(4)?,
-                            row.get::<_, Option<String>>(5)?,
-                            row.get::<_, Option<String>>(6)?,
-                            row.get::<_, Option<String>>(7)?,
-                            row.get::<_, Option<String>>(8)?,
-                            row.get::<_, Option<String>>(9)?,
+                            row.get::<_, String>(0)?,       // family_id
+                            row.get::<_, String>(1)?,       // name
+                            row.get::<_, Option<String>>(2)?,  // mailing_name
+                            row.get::<_, Option<String>>(3)?,  // address
+                            row.get::<_, Option<String>>(4)?,  // city
+                            row.get::<_, Option<String>>(5)?,  // state
+                            row.get::<_, Option<String>>(6)?,  // zip
+                            row.get::<_, Option<String>>(7)?,  // phone
+                            row.get::<_, Option<String>>(8)?,  // email
+                            row.get::<_, Option<String>>(9)?,  // photo_path
+                            row.get::<_, Option<String>>(10)?, // notes
+                            row.get::<_, Option<String>>(11)?, // children
+                            row.get::<_, Option<String>>(12)?, // alt_address
+                            row.get::<_, Option<String>>(13)?, // alt_city
+                            row.get::<_, Option<String>>(14)?, // alt_state
+                            row.get::<_, Option<String>>(15)?, // alt_zip
                         ))
                     })
                     .map_err(|e| e.to_string())?;
 
                 for family_result in families {
-                    let (family_id, name, address, city, state, zip, phone, email, photo_path, notes) =
+                    let (family_id, name, mailing_name, address, city, state, zip, phone, email, photo_path, notes, children, alt_address, alt_city, alt_state, alt_zip) =
                         family_result.map_err(|e| e.to_string())?;
 
                     let existing: Option<i64> = conn
@@ -221,15 +227,15 @@ pub fn restore_backup(
                     let db_family_id = if let Some(id) = existing {
                         if replace_existing {
                             conn.execute(
-                                "UPDATE families SET name = ?, address = ?, city = ?, state = ?, zip = ?, phone = ?, email = ?, photo_path = ?, notes = ?, updated_at = datetime('now') WHERE id = ?",
-                                params![name, address, city, state, zip, phone, email, photo_path, notes, id],
+                                "UPDATE families SET name = ?, mailing_name = ?, address = ?, city = ?, state = ?, zip = ?, phone = ?, email = ?, photo_path = ?, notes = ?, children = ?, alt_address = ?, alt_city = ?, alt_state = ?, alt_zip = ?, updated_at = datetime('now') WHERE id = ?",
+                                params![name, mailing_name, address, city, state, zip, phone, email, photo_path, notes, children, alt_address, alt_city, alt_state, alt_zip, id],
                             ).map_err(|e| e.to_string())?;
                         }
                         id
                     } else {
                         conn.execute(
-                            "INSERT INTO families (family_id, name, address, city, state, zip, phone, email, photo_path, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                            params![family_id, name, address, city, state, zip, phone, email, photo_path, notes],
+                            "INSERT INTO families (family_id, name, mailing_name, address, city, state, zip, phone, email, photo_path, notes, children, alt_address, alt_city, alt_state, alt_zip) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            params![family_id, name, mailing_name, address, city, state, zip, phone, email, photo_path, notes, children, alt_address, alt_city, alt_state, alt_zip],
                         ).map_err(|e| e.to_string())?;
                         conn.last_insert_rowid()
                     };
@@ -244,7 +250,7 @@ pub fn restore_backup(
 
                     let mut member_stmt = source_conn
                         .prepare(
-                            "SELECT first_name, last_name, role, birth_date, phone, email, photo_path, notes, sort_order FROM members WHERE family_id = ?",
+                            "SELECT first_name, last_name, role, birth_date, wedding_date, phone, email, photo_path, notes, sort_order FROM members WHERE family_id = ?",
                         )
                         .map_err(|e| e.to_string())?;
 
@@ -259,13 +265,14 @@ pub fn restore_backup(
                                 row.get::<_, Option<String>>(5)?,
                                 row.get::<_, Option<String>>(6)?,
                                 row.get::<_, Option<String>>(7)?,
-                                row.get::<_, i32>(8)?,
+                                row.get::<_, Option<String>>(8)?,
+                                row.get::<_, i32>(9)?,
                             ))
                         })
                         .map_err(|e| e.to_string())?;
 
                     for member_result in members {
-                        let (first_name, last_name, role, birth_date, phone, email, photo_path, notes, sort_order) =
+                        let (first_name, last_name, role, birth_date, wedding_date, phone, email, photo_path, notes, sort_order) =
                             member_result.map_err(|e| e.to_string())?;
 
                         let existing_member: Option<i64> = conn
@@ -279,14 +286,14 @@ pub fn restore_backup(
                         if let Some(member_id) = existing_member {
                             if replace_existing {
                                 conn.execute(
-                                    "UPDATE members SET role = ?, birth_date = ?, phone = ?, email = ?, photo_path = ?, notes = ?, sort_order = ?, updated_at = datetime('now') WHERE id = ?",
-                                    params![role, birth_date, phone, email, photo_path, notes, sort_order, member_id],
+                                    "UPDATE members SET role = ?, birth_date = ?, wedding_date = ?, phone = ?, email = ?, photo_path = ?, notes = ?, sort_order = ?, updated_at = datetime('now') WHERE id = ?",
+                                    params![role, birth_date, wedding_date, phone, email, photo_path, notes, sort_order, member_id],
                                 ).map_err(|e| e.to_string())?;
                             }
                         } else {
                             conn.execute(
-                                "INSERT INTO members (family_id, first_name, last_name, role, birth_date, phone, email, photo_path, notes, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                                params![db_family_id, first_name, last_name, role, birth_date, phone, email, photo_path, notes, sort_order],
+                                "INSERT INTO members (family_id, first_name, last_name, role, birth_date, wedding_date, phone, email, photo_path, notes, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                params![db_family_id, first_name, last_name, role, birth_date, wedding_date, phone, email, photo_path, notes, sort_order],
                             ).map_err(|e| e.to_string())?;
                         }
                     }
@@ -295,8 +302,8 @@ pub fn restore_backup(
 
             fs::remove_file(&temp_db_path).ok();
         } else if name.starts_with("photos/") {
-            let relative_path = name.strip_prefix("photos/").unwrap();
-            let dest_path = app_data_dir.join("photos").join(relative_path);
+            let relative_path = name.strip_prefix("photos/").unwrap().replace('\\', "/");
+            let dest_path = app_data_dir.join("photos").join(&relative_path);
 
             if let Some(parent) = dest_path.parent() {
                 fs::create_dir_all(parent).map_err(|e| e.to_string())?;

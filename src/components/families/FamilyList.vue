@@ -83,7 +83,7 @@ watch(
               <th class="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-300 hidden lg:table-cell">
                 Address
               </th>
-              <th class="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-300">Contact</th>
+              <th class="px-4 py-3 text-left text-sm font-medium text-gray-600 dark:text-gray-300">Home Phone</th>
               <th class="px-4 py-3 text-right text-sm font-medium text-gray-600 dark:text-gray-300">Actions</th>
             </tr>
           </thead>
@@ -91,6 +91,7 @@ watch(
             <tr
               v-for="family in families"
               :key="family.id"
+              :data-family-id="family.id"
               class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
               @click="emit('view', family.id)"
             >
@@ -99,7 +100,7 @@ watch(
                   <img
                     v-if="photoCache[family.id]"
                     :src="photoCache[family.id]!"
-                    class="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                    class="w-10 h-10 rounded-full object-cover shrink-0"
                     alt=""
                   />
                   <div class="font-medium text-gray-900 dark:text-gray-100 truncate">{{ family.name }}</div>
@@ -114,7 +115,6 @@ watch(
               </td>
               <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 align-top">
                 <div v-if="family.phone">{{ family.phone }}</div>
-                <div v-if="family.email" class="text-primary-600 dark:text-primary-400 truncate">{{ family.email }}</div>
               </td>
               <td class="px-4 py-3 text-right align-top" @click.stop>
                 <div class="flex items-center justify-end gap-2">
@@ -149,6 +149,7 @@ watch(
       <div
         v-for="family in families"
         :key="family.id"
+        :data-family-id="family.id"
         class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
         @click="emit('view', family.id)"
       >
@@ -156,13 +157,12 @@ watch(
           <img
             v-if="photoCache[family.id]"
             :src="photoCache[family.id]!"
-            class="w-12 h-12 rounded-full object-cover flex-shrink-0"
+            class="w-12 h-12 rounded-full object-cover shrink-0"
             alt=""
           />
           <div class="flex-1 min-w-0">
             <div class="font-medium text-gray-900 dark:text-gray-100">{{ family.name }}</div>
             <div v-if="family.phone" class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ family.phone }}</div>
-            <div v-if="family.email" class="text-sm text-primary-600 dark:text-primary-400 truncate">{{ family.email }}</div>
             <div v-if="family.city || family.state" class="text-sm text-gray-500 dark:text-gray-500 mt-1">
               {{ [family.city, family.state].filter(Boolean).join(", ") }}
             </div>

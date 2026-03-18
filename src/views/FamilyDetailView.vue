@@ -22,7 +22,22 @@ const familyPhotoBase64 = ref<string | null>(null);
 const familyId = computed(() => Number(route.params.id));
 const hasFamilyPhoto = computed(() => !!familiesStore.currentFamily?.photo_path);
 
+// Member reordering
+async function moveMember(index: number, direction: "up" | "down") {
+  const members = familiesStore.currentFamily?.members;
+  if (!members) return;
+
+  const newIndex = direction === "up" ? index - 1 : index + 1;
+  if (newIndex < 0 || newIndex >= members.length) return;
+
+  const ids = members.map((m) => m.id);
+  [ids[index], ids[newIndex]] = [ids[newIndex], ids[index]];
+
+  await familiesStore.reorderMembers(ids);
+}
+
 onMounted(async () => {
+  familiesStore.lastViewedFamilyId = familyId.value;
   await familiesStore.fetchFamily(familyId.value);
 });
 
@@ -158,12 +173,18 @@ async function deleteMember() {
         <div class="flex items-start justify-between">
           <div class="flex items-start gap-6">
             <!-- Family Photo -->
-            <PhotoUpload
-              :current-photo="familiesStore.currentFamily.photo_path"
-              photo-type="families"
-              @select="handlePhotoSelect"
-              @remove="handlePhotoRemove"
-            />
+            <div class="flex flex-col items-center">
+              <PhotoUpload
+                :current-photo="familiesStore.currentFamily.photo_path"
+                photo-type="families"
+                @select="handlePhotoSelect"
+                @remove="handlePhotoRemove"
+              />
+              <div v-if="familiesStore.currentFamily.directory_adults || familiesStore.currentFamily.directory_children" class="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
+                <p v-if="familiesStore.currentFamily.directory_adults">{{ familiesStore.currentFamily.directory_adults }}</p>
+                <p v-if="familiesStore.currentFamily.directory_children">{{ familiesStore.currentFamily.directory_children }}</p>
+              </div>
+            </div>
             <div>
               <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">
                 {{ familiesStore.currentFamily.name }}
@@ -174,15 +195,17 @@ async function deleteMember() {
                 <p v-if="familiesStore.currentFamily.city || familiesStore.currentFamily.state || familiesStore.currentFamily.zip">
                   {{ [familiesStore.currentFamily.city, familiesStore.currentFamily.state].filter(Boolean).join(", ") }} {{ familiesStore.currentFamily.zip }}
                 </p>
+                <template v-if="familiesStore.currentFamily.alt_address || familiesStore.currentFamily.alt_city || familiesStore.currentFamily.alt_state || familiesStore.currentFamily.alt_zip">
+                  <p class="mt-2 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-500">Alt Address</p>
+                  <p v-if="familiesStore.currentFamily.alt_address">{{ familiesStore.currentFamily.alt_address }}</p>
+                  <p v-if="familiesStore.currentFamily.alt_city || familiesStore.currentFamily.alt_state || familiesStore.currentFamily.alt_zip">
+                    {{ [familiesStore.currentFamily.alt_city, familiesStore.currentFamily.alt_state].filter(Boolean).join(", ") }} {{ familiesStore.currentFamily.alt_zip }}
+                  </p>
+                </template>
               </div>
-              <div class="mt-3 space-y-1 text-gray-600 dark:text-gray-400">
-                <p v-if="familiesStore.currentFamily.phone">
-                  {{ familiesStore.currentFamily.phone }}
-                </p>
-                <p v-if="familiesStore.currentFamily.email" class="text-primary-600 dark:text-primary-400">
-                  {{ familiesStore.currentFamily.email }}
-                </p>
-              </div>
+              <p v-if="familiesStore.currentFamily.phone" class="mt-3 text-gray-600 dark:text-gray-400">
+                {{ familiesStore.currentFamily.phone }}
+              </p>
             </div>
           </div>
           <button
@@ -217,15 +240,47 @@ async function deleteMember() {
         </div>
 
         <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <MemberCard
-            v-for="member in familiesStore.currentFamily.members"
+          <div
+            v-for="(member, index) in familiesStore.currentFamily.members"
             :key="member.id"
-            :member="member"
-            :has-family-photo="hasFamilyPhoto"
-            @edit="editMember"
-            @delete="confirmDeleteMember"
-            @crop-from-family="openCropperForMember"
-          />
+            class="relative flex"
+          >
+            <!-- Reorder Buttons -->
+            <div
+              v-if="familiesStore.currentFamily.members.length > 1"
+              class="flex flex-col justify-center gap-0.5 pr-1 shrink-0"
+            >
+              <button
+                :disabled="index === 0"
+                @click="moveMember(index, 'up')"
+                class="p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent dark:disabled:hover:bg-transparent"
+                title="Move up"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                </svg>
+              </button>
+              <button
+                :disabled="index === familiesStore.currentFamily.members.length - 1"
+                @click="moveMember(index, 'down')"
+                class="p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-transparent dark:disabled:hover:bg-transparent"
+                title="Move down"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+            <div class="flex-1 min-w-0">
+              <MemberCard
+                :member="member"
+                :has-family-photo="hasFamilyPhoto"
+                @edit="editMember"
+                @delete="confirmDeleteMember"
+                @crop-from-family="openCropperForMember"
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>

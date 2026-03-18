@@ -23,8 +23,8 @@ async function selectFile() {
     multiple: false,
     filters: [
       {
-        name: "Excel Files",
-        extensions: ["xlsx", "xls"],
+        name: "Spreadsheet Files",
+        extensions: ["xlsx", "xls", "csv"],
       },
     ],
   });
@@ -131,9 +131,24 @@ const canProceed = computed(() => {
     <!-- Step 1: File Selection -->
     <div v-if="step === 1">
       <h2 class="text-lg font-semibold dark:text-gray-100 mb-4">Select File</h2>
-      <p class="text-gray-600 dark:text-gray-400 mb-6">
-        Choose an Excel file (.xlsx) containing your directory data. The file should have columns for Family ID, Family Name, First Name, Last Name, and optionally Address, Phone, Email, and Role.
+      <p class="text-gray-600 dark:text-gray-400 mb-4">
+        Import a <strong>Servant Keeper</strong> export (CSV or Excel) containing your directory data.
+        Families are grouped by <strong>Family ID</strong>. If no Family Name column is present, the Last Name is used.
       </p>
+      <details class="mb-6 text-sm text-gray-500 dark:text-gray-400">
+        <summary class="cursor-pointer hover:text-gray-700 dark:hover:text-gray-300 font-medium">Supported fields</summary>
+        <ul class="mt-2 ml-4 list-disc space-y-0.5">
+          <li><strong>Family ID</strong> (required)</li>
+          <li><strong>Last Name</strong> (required)</li>
+          <li><strong>First Name</strong> (required)</li>
+          <li>Family Name, Mailing Name</li>
+          <li>Address, City, State, Zip Code</li>
+          <li>Phone (family), Cell Phone (individual)</li>
+          <li>E-Mail, Birth Date, Wedding Date</li>
+          <li>Children (comma-separated list of children's names, stored on family and used for role detection)</li>
+          <li>Alt Address, Alt City, Alt State, Alt Zip Code</li>
+        </ul>
+      </details>
 
       <div
         @click="selectFile"

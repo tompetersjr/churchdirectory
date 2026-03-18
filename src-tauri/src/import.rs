@@ -17,7 +17,11 @@ struct ImportRow {
     state: Option<String>,
     zip: Option<String>,
     phone: Option<String>,
-    email: Option<String>,
+    children: Option<String>,
+    alt_address: Option<String>,
+    alt_city: Option<String>,
+    alt_state: Option<String>,
+    alt_zip: Option<String>,
     member_first_name: String,
     member_last_name: String,
     member_role: Option<String>,
@@ -121,6 +125,150 @@ fn normalize_date(date_str: &str) -> Option<String> {
     }
 }
 
+/// Route to the appropriate parser based on file extension.
+fn parse_file(file_path: &str) -> Result<Vec<ImportRow>, String> {
+    let path = Path::new(file_path);
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .unwrap_or_default();
+
+    match ext.as_str() {
+        "xlsx" | "xls" => parse_xlsx(file_path),
+        "csv" => parse_csv(file_path),
+        _ => Err(format!("Unsupported file format: .{}. Use .xlsx, .xls, or .csv", ext)),
+    }
+}
+
+/// Extract an ImportRow from a header map and a cell getter closure.
+/// Shared logic between XLSX and CSV parsers.
+fn extract_row(get_cell: &dyn Fn(&str) -> Option<String>) -> Option<ImportRow> {
+    let family_id = get_cell("family id")
+        .or_else(|| get_cell("familyid"))
+        .or_else(|| get_cell("family_id"));
+
+    let family_name = get_cell("family name")
+        .or_else(|| get_cell("familyname"))
+        .or_else(|| get_cell("family_name"))
+        .or_else(|| get_cell("last name"))
+        .or_else(|| get_cell("lastname"));
+
+    let first_name = get_cell("first name")
+        .or_else(|| get_cell("firstname"))
+        .or_else(|| get_cell("first_name"));
+
+    let last_name = get_cell("last name")
+        .or_else(|| get_cell("lastname"))
+        .or_else(|| get_cell("last_name"));
+
+    let (fid, fname, mfirst, mlast) = match (family_id, family_name, first_name, last_name) {
+        (Some(a), Some(b), Some(c), Some(d)) => (a, b, c, d),
+        _ => return None,
+    };
+
+    // Email
+    let email = get_cell("email")
+        .or_else(|| get_cell("e-mail"))
+        .or_else(|| get_cell("email address"))
+        .or_else(|| get_cell("emailaddress"));
+
+    // Family/home phone
+    let family_phone = get_cell("phone")
+        .or_else(|| get_cell("telephone"))
+        .or_else(|| get_cell("phone number"))
+        .or_else(|| get_cell("phonenumber"))
+        .or_else(|| get_cell("home phone"));
+
+    // Individual cell phone — stored on the member, not the family
+    let member_phone = get_cell("cell phone")
+        .or_else(|| get_cell("mobile"))
+        .or_else(|| get_cell("cell"))
+        .or_else(|| get_cell("cellphone"))
+        .or_else(|| get_cell("mobile phone"));
+
+    // Mailing name
+    let mailing_name = get_cell("mailing name")
+        .or_else(|| get_cell("mailingname"))
+        .or_else(|| get_cell("mailing_name"))
+        .or_else(|| get_cell("envelope name"))
+        .or_else(|| get_cell("mail name"));
+
+    // Birth date
+    let birth_date_raw = get_cell("birth date")
+        .or_else(|| get_cell("birthdate"))
+        .or_else(|| get_cell("birth_date"))
+        .or_else(|| get_cell("birthday"))
+        .or_else(|| get_cell("dob"))
+        .or_else(|| get_cell("date of birth"));
+    let birth_date = birth_date_raw.and_then(|d| normalize_date(&d));
+
+    // Wedding date
+    let wedding_date_raw = get_cell("wedding date")
+        .or_else(|| get_cell("weddingdate"))
+        .or_else(|| get_cell("wedding_date"))
+        .or_else(|| get_cell("anniversary"))
+        .or_else(|| get_cell("marriage date"))
+        .or_else(|| get_cell("married"));
+    let wedding_date = wedding_date_raw.and_then(|d| normalize_date(&d));
+
+    // Children (family-level field listing the children in the family)
+    let children = get_cell("children");
+
+    // Alt address fields
+    let alt_address = get_cell("alt address");
+    let alt_city = get_cell("alt city");
+    let alt_state = get_cell("alt state");
+    let alt_zip = get_cell("alt zip code")
+        .or_else(|| get_cell("alt zip"));
+
+    // Role: check explicit column first, then infer from Children column
+    let mut member_role = get_cell("role")
+        .or_else(|| get_cell("relationship"))
+        .or_else(|| get_cell("member type"));
+
+    if member_role.is_none() {
+        if let Some(ref children_str) = children {
+            let children_names: Vec<String> = children_str
+                .split(',')
+                .map(|s| s.trim().to_lowercase())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if children_names.contains(&mfirst.to_lowercase()) {
+                member_role = Some("Child".to_string());
+            }
+        }
+    }
+
+    Some(ImportRow {
+        family_id: fid,
+        family_name: fname,
+        mailing_name,
+        address: get_cell("address")
+            .or_else(|| get_cell("street address"))
+            .or_else(|| get_cell("street")),
+        city: get_cell("city"),
+        state: get_cell("state"),
+        zip: get_cell("zip")
+            .or_else(|| get_cell("zipcode"))
+            .or_else(|| get_cell("zip code"))
+            .or_else(|| get_cell("postal code")),
+        phone: family_phone,
+        children,
+        alt_address,
+        alt_city,
+        alt_state,
+        alt_zip,
+        member_first_name: mfirst,
+        member_last_name: mlast,
+        member_role,
+        member_phone,
+        member_email: email,
+        member_birth_date: birth_date,
+        member_wedding_date: wedding_date,
+    })
+}
+
 fn parse_xlsx(file_path: &str) -> Result<Vec<ImportRow>, String> {
     let path = Path::new(file_path);
     let mut workbook: Xlsx<_> = open_workbook(path).map_err(|e| format!("Failed to open file: {}", e))?;
@@ -142,7 +290,8 @@ fn parse_xlsx(file_path: &str) -> Result<Vec<ImportRow>, String> {
         if row_idx == 0 {
             for (col_idx, cell) in row.iter().enumerate() {
                 let header = cell.to_string().to_lowercase().trim().to_string();
-                headers.insert(header, col_idx);
+                // Only store the first occurrence of each header
+                headers.entry(header).or_insert(col_idx);
             }
             continue;
         }
@@ -156,85 +305,44 @@ fn parse_xlsx(file_path: &str) -> Result<Vec<ImportRow>, String> {
             })
         };
 
-        let family_id = get_cell("family id")
-            .or_else(|| get_cell("familyid"))
-            .or_else(|| get_cell("family_id"));
+        if let Some(import_row) = extract_row(&get_cell) {
+            rows.push(import_row);
+        }
+    }
 
-        let family_name = get_cell("family name")
-            .or_else(|| get_cell("familyname"))
-            .or_else(|| get_cell("family_name"))
-            .or_else(|| get_cell("last name"))
-            .or_else(|| get_cell("lastname"));
+    Ok(rows)
+}
 
-        let first_name = get_cell("first name")
-            .or_else(|| get_cell("firstname"))
-            .or_else(|| get_cell("first_name"));
+fn parse_csv(file_path: &str) -> Result<Vec<ImportRow>, String> {
+    let mut reader = csv::Reader::from_path(file_path)
+        .map_err(|e| format!("Failed to open CSV file: {}", e))?;
 
-        let last_name = get_cell("last name")
-            .or_else(|| get_cell("lastname"))
-            .or_else(|| get_cell("last_name"));
+    // Build header map (lowercase, first occurrence wins for duplicates)
+    let mut headers: HashMap<String, usize> = HashMap::new();
+    {
+        let header_record = reader.headers().map_err(|e| format!("Failed to read CSV headers: {}", e))?;
+        for (col_idx, field) in header_record.iter().enumerate() {
+            let header = field.to_lowercase().trim().to_string();
+            headers.entry(header).or_insert(col_idx);
+        }
+    }
 
-        if let (Some(fid), Some(fname), Some(mfirst), Some(mlast)) =
-            (family_id, family_name, first_name, last_name)
-        {
-            // Try various email column names
-            let email = get_cell("email")
-                .or_else(|| get_cell("e-mail"))
-                .or_else(|| get_cell("email address"))
-                .or_else(|| get_cell("emailaddress"));
+    let mut rows = Vec::new();
 
-            // Try various phone column names
-            let phone = get_cell("phone")
-                .or_else(|| get_cell("telephone"))
-                .or_else(|| get_cell("phone number"))
-                .or_else(|| get_cell("phonenumber"))
-                .or_else(|| get_cell("home phone"))
-                .or_else(|| get_cell("cell phone"))
-                .or_else(|| get_cell("mobile"));
+    for result in reader.records() {
+        let record = result.map_err(|e| format!("Failed to read CSV row: {}", e))?;
 
-            // Try various mailing name column names
-            let mailing_name = get_cell("mailing name")
-                .or_else(|| get_cell("mailingname"))
-                .or_else(|| get_cell("mailing_name"))
-                .or_else(|| get_cell("envelope name"))
-                .or_else(|| get_cell("mail name"));
+        let get_cell = |name: &str| -> Option<String> {
+            headers.get(name).and_then(|&idx| {
+                record.get(idx).and_then(|val| {
+                    let s = val.trim().to_string();
+                    if s.is_empty() { None } else { Some(s) }
+                })
+            })
+        };
 
-            // Try various birth date column names
-            let birth_date_raw = get_cell("birth date")
-                .or_else(|| get_cell("birthdate"))
-                .or_else(|| get_cell("birth_date"))
-                .or_else(|| get_cell("birthday"))
-                .or_else(|| get_cell("dob"))
-                .or_else(|| get_cell("date of birth"));
-            let birth_date = birth_date_raw.and_then(|d| normalize_date(&d));
-
-            // Try various wedding date column names
-            let wedding_date_raw = get_cell("wedding date")
-                .or_else(|| get_cell("weddingdate"))
-                .or_else(|| get_cell("wedding_date"))
-                .or_else(|| get_cell("anniversary"))
-                .or_else(|| get_cell("marriage date"))
-                .or_else(|| get_cell("married"));
-            let wedding_date = wedding_date_raw.and_then(|d| normalize_date(&d));
-
-            rows.push(ImportRow {
-                family_id: fid,
-                family_name: fname,
-                mailing_name,
-                address: get_cell("address").or_else(|| get_cell("street address")).or_else(|| get_cell("street")),
-                city: get_cell("city"),
-                state: get_cell("state"),
-                zip: get_cell("zip").or_else(|| get_cell("zipcode")).or_else(|| get_cell("zip code")).or_else(|| get_cell("postal code")),
-                phone: phone.clone(),
-                email: email.clone(),
-                member_first_name: mfirst,
-                member_last_name: mlast,
-                member_role: get_cell("role").or_else(|| get_cell("relationship")).or_else(|| get_cell("member type")),
-                member_phone: phone,
-                member_email: email,
-                member_birth_date: birth_date,
-                member_wedding_date: wedding_date,
-            });
+        if let Some(import_row) = extract_row(&get_cell) {
+            rows.push(import_row);
         }
     }
 
@@ -243,7 +351,7 @@ fn parse_xlsx(file_path: &str) -> Result<Vec<ImportRow>, String> {
 
 #[tauri::command]
 pub fn preview_import(db: State<'_, Database>, file_path: String) -> Result<ImportPreview, String> {
-    let rows = parse_xlsx(&file_path)?;
+    let rows = parse_file(&file_path)?;
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
     let mut families_map: HashMap<String, ImportFamilyPreview> = HashMap::new();
@@ -327,7 +435,7 @@ pub fn execute_import(
     file_path: String,
     update_duplicates: bool,
 ) -> Result<ImportResult, String> {
-    let rows = parse_xlsx(&file_path)?;
+    let rows = parse_file(&file_path)?;
     let conn = db.conn.lock().map_err(|e| e.to_string())?;
 
     let mut result = ImportResult {
@@ -357,7 +465,7 @@ pub fn execute_import(
         let db_family_id = if let Some(existing_id) = existing_family_id {
             if update_duplicates {
                 if let Err(e) = conn.execute(
-                    "UPDATE families SET name = ?, mailing_name = ?, address = ?, city = ?, state = ?, zip = ?, phone = ?, email = ?, updated_at = datetime('now') WHERE id = ?",
+                    "UPDATE families SET name = ?, mailing_name = ?, address = ?, city = ?, state = ?, zip = ?, phone = ?, children = ?, alt_address = ?, alt_city = ?, alt_state = ?, alt_zip = ?, directory_children = COALESCE(directory_children, ?), updated_at = datetime('now') WHERE id = ?",
                     params![
                         first_row.family_name,
                         first_row.mailing_name,
@@ -366,7 +474,12 @@ pub fn execute_import(
                         first_row.state,
                         first_row.zip,
                         first_row.phone,
-                        first_row.email,
+                        first_row.children,
+                        first_row.alt_address,
+                        first_row.alt_city,
+                        first_row.alt_state,
+                        first_row.alt_zip,
+                        first_row.children,
                         existing_id,
                     ],
                 ) {
@@ -378,7 +491,7 @@ pub fn execute_import(
             existing_id
         } else {
             match conn.execute(
-                "INSERT INTO families (family_id, name, mailing_name, address, city, state, zip, phone, email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO families (family_id, name, mailing_name, address, city, state, zip, phone, children, alt_address, alt_city, alt_state, alt_zip, directory_children) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 params![
                     family_id,
                     first_row.family_name,
@@ -388,7 +501,12 @@ pub fn execute_import(
                     first_row.state,
                     first_row.zip,
                     first_row.phone,
-                    first_row.email,
+                    first_row.children,
+                    first_row.alt_address,
+                    first_row.alt_city,
+                    first_row.alt_state,
+                    first_row.alt_zip,
+                    first_row.children,
                 ],
             ) {
                 Ok(_) => {

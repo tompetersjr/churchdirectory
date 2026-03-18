@@ -11,6 +11,7 @@ export const useFamiliesStore = defineStore("families", () => {
   const searchQuery = ref("");
   const sortBy = ref<"name" | "updated_at">("name");
   const sortOrder = ref<"asc" | "desc">("asc");
+  const lastViewedFamilyId = ref<number | null>(null);
 
   const filteredFamilies = computed(() => {
     let result = [...families.value];
@@ -21,8 +22,7 @@ export const useFamiliesStore = defineStore("families", () => {
         (f) =>
           f.name.toLowerCase().includes(query) ||
           f.family_id.toLowerCase().includes(query) ||
-          f.address?.toLowerCase().includes(query) ||
-          f.email?.toLowerCase().includes(query)
+          f.address?.toLowerCase().includes(query)
       );
     }
 
@@ -122,6 +122,26 @@ export const useFamiliesStore = defineStore("families", () => {
       throw e;
     } finally {
       loading.value = false;
+    }
+  }
+
+  async function reorderMembers(memberIds: number[]) {
+    try {
+      await invoke("reorder_members", { memberIds });
+      // Update local sort_order values to match new order
+      if (currentFamily.value) {
+        memberIds.forEach((id, index) => {
+          const member = currentFamily.value!.members.find((m) => m.id === id);
+          if (member) {
+            member.sort_order = index;
+          }
+        });
+        // Re-sort members array to reflect new order
+        currentFamily.value.members.sort((a, b) => a.sort_order - b.sort_order);
+      }
+    } catch (e) {
+      error.value = String(e);
+      throw e;
     }
   }
 
@@ -238,6 +258,7 @@ export const useFamiliesStore = defineStore("families", () => {
     createFamily,
     updateFamily,
     deleteFamily,
+    reorderMembers,
     createMember,
     updateMember,
     deleteMember,
@@ -246,5 +267,6 @@ export const useFamiliesStore = defineStore("families", () => {
     removeFamilyPhoto,
     getPhotosDir,
     cropFamilyPhotoToMember,
+    lastViewedFamilyId,
   };
 });

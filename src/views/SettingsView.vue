@@ -9,6 +9,10 @@ const saved = ref(false);
 
 const formData = ref({
   church_name: "",
+  church_address: "",
+  church_phone: "",
+  church_email: "",
+  church_website: "",
   theme: "system" as "system" | "light" | "dark",
   default_layout: "grid" as "grid" | "list",
   page_size: "letter" as "letter" | "a4",
@@ -21,6 +25,10 @@ onMounted(async () => {
   await settingsStore.fetchSettings();
   formData.value = {
     church_name: settingsStore.settings.church_name,
+    church_address: settingsStore.settings.church_address || "",
+    church_phone: settingsStore.settings.church_phone || "",
+    church_email: settingsStore.settings.church_email || "",
+    church_website: settingsStore.settings.church_website || "",
     theme: settingsStore.settings.theme || "system",
     default_layout: settingsStore.settings.default_layout as "grid" | "list",
     page_size: settingsStore.settings.page_size as "letter" | "a4",
@@ -80,7 +88,56 @@ async function selectLogo() {
                 v-model="formData.church_name"
                 type="text"
                 class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 dark:text-gray-100"
-                placeholder="Enter church name"
+                placeholder=""
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Church Address
+              </label>
+              <textarea
+                v-model="formData.church_address"
+                rows="2"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 dark:text-gray-100"
+                placeholder=""
+              ></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Phone
+                </label>
+                <input
+                  v-model="formData.church_phone"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 dark:text-gray-100"
+                  placeholder=""
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Email
+                </label>
+                <input
+                  v-model="formData.church_email"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 dark:text-gray-100"
+                  placeholder=""
+                />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Website
+              </label>
+              <input
+                v-model="formData.church_website"
+                type="text"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 dark:text-gray-100"
+                placeholder=""
               />
             </div>
 

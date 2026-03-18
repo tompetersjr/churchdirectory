@@ -113,7 +113,7 @@ function handleSubmit() {
 
     <div class="grid grid-cols-2 gap-4">
       <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Cell Phone</label>
         <input
           v-model="formData.phone"
           type="tel"
