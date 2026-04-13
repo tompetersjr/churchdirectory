@@ -2366,23 +2366,35 @@ fn render_photo_grid(
         let line_spacing = 3.5;
         let mut caption_y = caption_top - 2.5;
 
-        // Family last name (bold) followed by adults on the same line
-        let name_width = estimate_text_width(&entry.family_name, caption_size) * 1.07;
+        // Family last name (bold) followed by adults on the same line.
+        // Include the trailing ", " in the bold segment so the comma is drawn
+        // as part of the bold text — then use accurate Helvetica metrics
+        // (with a bold-width correction) to place the adults text.
+        let has_adults = entry
+            .directory_adults
+            .as_ref()
+            .map(|a| !a.is_empty())
+            .unwrap_or(false);
+        let bold_segment = if has_adults {
+            format!("{}, ", entry.family_name)
+        } else {
+            entry.family_name.clone()
+        };
         layer.use_text(
-            &entry.family_name,
+            &bold_segment,
             caption_size,
             Mm(rendered_img_x),
             Mm(caption_y),
             font_bold,
         );
 
-        if let Some(ref adults) = entry.directory_adults {
-            if !adults.is_empty() {
-                let adults_text = format!(", {}", adults);
+        if has_adults {
+            let bold_width = measure_helvetica_width(&bold_segment, caption_size) * 1.07;
+            if let Some(ref adults) = entry.directory_adults {
                 layer.use_text(
-                    &adults_text,
+                    adults,
                     caption_size,
-                    Mm(rendered_img_x + name_width),
+                    Mm(rendered_img_x + bold_width),
                     Mm(caption_y),
                     font,
                 );
