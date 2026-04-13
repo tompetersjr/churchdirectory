@@ -24,8 +24,8 @@ const options = ref<PdfOptions>({
   pastor_letter: undefined,
   mission_statement: undefined,
   first_page_markdown: undefined,
-  back_cover_image_path: undefined,
   celebration_image_path: undefined,
+  photo_grid_rows: 4,
 });
 
 // Image previews (base64 data URIs)
@@ -33,7 +33,6 @@ const imagePreviews = ref<Record<string, string | null>>({});
 
 const imageSlots = [
   { key: "cover_image", label: "Front Cover", description: "The front of the booklet" },
-  { key: "back_cover_image", label: "Back Cover", description: "The back of the booklet" },
   { key: "celebration_image", label: "Celebrations", description: "Header image for birthdays & anniversaries" },
 ];
 
@@ -48,8 +47,8 @@ onMounted(async () => {
     pastor_letter: settingsStore.settings.pastor_letter,
     mission_statement: settingsStore.settings.mission_statement,
     first_page_markdown: settingsStore.settings.first_page_markdown,
-    back_cover_image_path: settingsStore.settings.back_cover_image_path,
     celebration_image_path: settingsStore.settings.celebration_image_path,
+    photo_grid_rows: 4,
   };
 
   try {
@@ -61,7 +60,7 @@ onMounted(async () => {
   // Load existing image previews
   for (const slot of imageSlots) {
     const settingKey = `${slot.key}_path` as keyof PdfOptions;
-    const filename = options.value[settingKey];
+    const filename = options.value[settingKey] as string | undefined;
     if (filename) {
       await loadImagePreview(slot.key, filename);
     }
@@ -343,6 +342,33 @@ async function generatePdf() {
             class="mt-2 px-3 py-1.5 text-sm bg-primary-600 text-white rounded hover:bg-primary-700"
           >
             Save
+          </button>
+        </div>
+      </div>
+
+      <!-- Photo Size -->
+      <div class="mb-6">
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Photo Page Layout
+        </label>
+        <div class="flex gap-3">
+          <button
+            @click="options.photo_grid_rows = 4"
+            class="flex-1 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-colors"
+            :class="options.photo_grid_rows === 4
+              ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+              : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'"
+          >
+            4 Rows — Larger Photos
+          </button>
+          <button
+            @click="options.photo_grid_rows = 5"
+            class="flex-1 px-4 py-3 rounded-lg border-2 text-sm font-medium transition-colors"
+            :class="options.photo_grid_rows === 5
+              ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300'
+              : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600'"
+          >
+            5 Rows — Smaller Photos
           </button>
         </div>
       </div>

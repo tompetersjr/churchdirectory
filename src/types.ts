@@ -147,4 +147,5 @@ export interface PdfOptions {
   first_page_markdown?: string;
   back_cover_image_path?: string;
   celebration_image_path?: string;
+  photo_grid_rows?: number;
 }

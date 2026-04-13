@@ -21,16 +21,16 @@ const GRID_MARGIN_TOP: f32 = 8.0;
 const GRID_MARGIN_BOTTOM: f32 = 1.0;
 const GRID_COLS: usize = 2;
 const GRID_ROWS: usize = 5;
-const GRID_CAPTION_HEIGHT: f32 = 13.0; // Space below photo for name + adults + children lines
-const GRID_COL_SPACING: f32 = 6.0;
-const GRID_ROW_SPACING: f32 = 2.0;
+const GRID_CAPTION_HEIGHT: f32 = 9.0; // Space below photo for name+adults line + children line
+const GRID_COL_SPACING: f32 = 4.0;
+const GRID_ROW_SPACING: f32 = 0.75;
 const GRID_CELL_PADDING: f32 = 0.5;
 
 // Text card layout
 const CARD_MARGIN: f32 = 15.0;
 const CARD_COLS: usize = 2;
 const CARD_COL_GAP: f32 = 10.0;
-const CARD_SPACING: f32 = 8.0;
+const CARD_SPACING: f32 = 6.0;
 const CARD_NAME_SIZE: f32 = 11.0;
 const CARD_TEXT_SIZE: f32 = 9.0;
 const CARD_LINE_HEIGHT: f32 = 4.5;
@@ -39,7 +39,8 @@ const CARD_LINE_HEIGHT: f32 = 4.5;
 const GRID_NAME_SIZE: f32 = 9.0;
 
 // Celebration page layout
-const CELEB_MARGIN: f32 = 12.0;
+const CELEB_MARGIN_TOP: f32 = 15.0;
+const CELEB_MARGIN_BOTTOM: f32 = 17.0;
 const CELEB_TITLE_SIZE: f32 = 16.0;
 const CELEB_MONTH_SIZE: f32 = 12.0;
 const CELEB_SECTION_SIZE: f32 = 8.0;
@@ -65,9 +66,9 @@ enum ContentPage {
         title_line2: String,
         title_color: String,
     },
-    PhotoGrid(Vec<PhotoGridEntry>),
+    PhotoGrid { entries: Vec<PhotoGridEntry>, grid_rows: usize },
     TextCards([Vec<FamilyCardData>; 2]),
-    CelebrationPages { months: Vec<CelebrationMonth>, is_first: bool, image_path: Option<PathBuf> },
+    CelebrationPages(CelebPage),
     MarkdownContent(String),
     FirstInsidePage {
         pastor_letter: Option<String>,
@@ -111,6 +112,38 @@ struct CelebrationMonth {
     month_name: String,
     birthdays: Vec<CelebrationEntry>,
     anniversaries: Vec<CelebrationEntry>,
+}
+
+/// A single renderable item in the celebration flow layout
+#[derive(Clone)]
+enum CelebItem {
+    /// Month heading, with flag indicating if it's a continuation
+    MonthHeader { name: String, continued: bool },
+    /// "Birthdays" or "Anniversaries" section label
+    SectionHeader(String),
+    /// A single date + name entry
+    Entry { display_date: String, name: String },
+    /// Vertical spacing between months
+    MonthGap,
+}
+
+impl CelebItem {
+    fn height(&self) -> f32 {
+        match self {
+            CelebItem::MonthHeader { .. } => 2.0 + 5.0, // text + accent line + gap
+            CelebItem::SectionHeader(_) => CELEB_SECTION_SIZE * 0.4 + CELEB_SECTION_SPACING * 0.5,
+            CelebItem::Entry { .. } => CELEB_LINE_HEIGHT,
+            CelebItem::MonthGap => CELEB_MONTH_SPACING,
+        }
+    }
+}
+
+/// A page of celebrations: two columns of items, plus first-page flag and image
+struct CelebPage {
+    left: Vec<CelebItem>,
+    right: Vec<CelebItem>,
+    is_first: bool,
+    image_path: Option<PathBuf>,
 }
 
 struct PhotoGridEntry {
@@ -334,10 +367,7 @@ pub fn generate_pdf(
         }
     }
 
-    // Page 2: Inside front cover (blank)
-    content_pages.push(ContentPage::Blank);
-
-    // Page 3: First inside page (pastor letter + mission statement)
+    // Pastor letter + mission statement (inside front cover)
     let has_pastor = options.pastor_letter.as_ref().map_or(false, |s| !s.is_empty());
     let has_mission = options.mission_statement.as_ref().map_or(false, |s| !s.is_empty());
     if has_pastor || has_mission {
@@ -348,19 +378,15 @@ pub fn generate_pdf(
     } else if let Some(ref markdown) = options.first_page_markdown {
         if !markdown.is_empty() {
             content_pages.push(ContentPage::MarkdownContent(markdown.clone()));
-        } else {
-            content_pages.push(ContentPage::Blank);
         }
-    } else {
-        content_pages.push(ContentPage::Blank);
     }
 
-    // Page 4: Pastor, Elders & Staff
+    // Pastor, Elders & Staff
     if !staff_entries.is_empty() {
         content_pages.push(ContentPage::StaffPage(staff_entries));
     }
 
-    // Page 5: Ministry Team Leadership
+    // Page 4: Ministry Team Leadership
     let leadership_entries: Vec<LeadershipEntry> = {
         let conn = db.conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn
@@ -428,7 +454,7 @@ pub fn generate_pdf(
         });
     }
 
-    // Pages 6+: Photo grid (only families with photos and include_photo_in_directory enabled)
+    // Pages 5+: Photo grid (only families with photos and include_photo_in_directory enabled)
     let mut grid_entries: Vec<PhotoGridEntry> = Vec::new();
     for fwm in &families_with_members {
         if !fwm.family.include_photo_in_directory {
@@ -462,7 +488,8 @@ pub fn generate_pdf(
 
     // Chunk grid entries into pages, laid out column-first (down left column, then right)
     // so alphabetical order reads top-to-bottom within each column.
-    let entries_per_page = GRID_COLS * GRID_ROWS;
+    let grid_rows = options.photo_grid_rows.unwrap_or(4);
+    let entries_per_page = GRID_COLS * grid_rows;
     for chunk in grid_entries.chunks(entries_per_page) {
         let page_entries: Vec<PhotoGridEntry> = chunk
             .iter()
@@ -475,7 +502,7 @@ pub fn generate_pdf(
             })
             .collect();
 
-        content_pages.push(ContentPage::PhotoGrid(page_entries));
+        content_pages.push(ContentPage::PhotoGrid { entries: page_entries, grid_rows });
     }
 
     // Text-only card pages for ALL families
@@ -603,10 +630,10 @@ pub fn generate_pdf(
         month.anniversaries.dedup_by(|a, b| a.name == b.name && a.day == b.day);
     }
 
-    // Only include if there's any data
+    // Add celebration pages immediately after directory content (no blank gap)
     let has_celebrations = celebration_months.iter().any(|m| !m.birthdays.is_empty() || !m.anniversaries.is_empty());
+
     if has_celebrations {
-        // Resolve celebration header image
         let celeb_image = options.celebration_image_path.as_ref().and_then(|filename| {
             let full_path = photos_dir.join("directory").join(filename);
             let full_res = get_full_resolution_path(&full_path);
@@ -614,30 +641,16 @@ pub fn generate_pdf(
             if path.exists() { Some(path) } else { None }
         });
 
-        let celeb_pages = paginate_celebrations(&celebration_months);
-        for (i, page) in celeb_pages.into_iter().enumerate() {
-            content_pages.push(ContentPage::CelebrationPages {
-                months: page,
-                is_first: i == 0,
-                image_path: celeb_image.clone(),
-            });
+        let celeb_pages = paginate_celebrations(&celebration_months, celeb_image);
+        for page in celeb_pages {
+            content_pages.push(ContentPage::CelebrationPages(page));
         }
     }
 
-    // Pad to multiple of 4 BEFORE adding back cover.
-    // This ensures padding blanks end up on inner sheets rather than the
-    // outermost sheet (which holds cover + back cover in imposition).
-    // We need total pages to be a multiple of 4, and we still need to add 1
-    // more page (back_cover), so pad until (current + 1) % 4 == 0.
-    while (content_pages.len() + 1) % 4 != 0 {
+    // Pad with blanks at the end to reach a multiple of 4
+    while content_pages.len() % 4 != 0 {
         content_pages.push(ContentPage::Blank);
     }
-
-    // Back cover image (last position)
-    content_pages.push(resolve_image_page(
-        &options.back_cover_image_path,
-        &photos_dir,
-    ));
 
     // ========================================
     // Pass 2: Imposition and PDF rendering
@@ -818,106 +831,265 @@ fn parse_month_day(date_str: &str) -> Option<(usize, u32, String)> {
 }
 
 /// Estimate the height of a celebration month block in mm
-fn celebration_month_height(month: &CelebrationMonth) -> f32 {
-    if month.birthdays.is_empty() && month.anniversaries.is_empty() {
-        return 0.0;
+
+/// Flatten celebration months into a linear stream of renderable items
+fn flatten_celebrations(months: &[CelebrationMonth]) -> Vec<CelebItem> {
+    let mut items: Vec<CelebItem> = Vec::new();
+    for month in months {
+        if month.birthdays.is_empty() && month.anniversaries.is_empty() {
+            continue;
+        }
+        items.push(CelebItem::MonthHeader { name: month.month_name.clone(), continued: false });
+        if !month.birthdays.is_empty() {
+            items.push(CelebItem::SectionHeader("Birthdays".to_string()));
+            for entry in &month.birthdays {
+                items.push(CelebItem::Entry {
+                    display_date: entry.display_date.clone(),
+                    name: entry.name.clone(),
+                });
+            }
+        }
+        if !month.anniversaries.is_empty() {
+            items.push(CelebItem::SectionHeader("Anniversaries".to_string()));
+            for entry in &month.anniversaries {
+                items.push(CelebItem::Entry {
+                    display_date: entry.display_date.clone(),
+                    name: entry.name.clone(),
+                });
+            }
+        }
+        items.push(CelebItem::MonthGap);
     }
-    let mut h = 2.0 + 5.0; // month heading (2mm below text) + accent line + gap below
-    if !month.birthdays.is_empty() {
-        h += CELEB_SECTION_SIZE * 0.4 + CELEB_SECTION_SPACING * 0.5; // section label
-        h += month.birthdays.len() as f32 * CELEB_LINE_HEIGHT;
-        h += CELEB_SECTION_SPACING;
+    // Remove trailing MonthGap
+    if matches!(items.last(), Some(CelebItem::MonthGap)) {
+        items.pop();
     }
-    if !month.anniversaries.is_empty() {
-        h += CELEB_SECTION_SIZE * 0.4 + CELEB_SECTION_SPACING * 0.5; // section label
-        h += month.anniversaries.len() as f32 * CELEB_LINE_HEIGHT;
-        h += CELEB_SECTION_SPACING;
+    items
+}
+
+/// Check if there are any Entry items remaining for the current month
+/// starting from the given index (before the next MonthHeader or end).
+fn has_remaining_entries(items: &[CelebItem], from_idx: usize) -> bool {
+    for item in &items[from_idx..] {
+        match item {
+            CelebItem::MonthHeader { .. } => return false,
+            CelebItem::Entry { .. } => return true,
+            _ => {}
+        }
     }
-    h += CELEB_MONTH_SPACING;
+    false
+}
+
+/// Calculate the minimum height needed to show a useful start of the next content:
+/// the current item plus enough room for at least one Entry line.
+fn min_useful_height(items: &[CelebItem], from_idx: usize) -> f32 {
+    let mut h = 0.0;
+    for item in &items[from_idx..] {
+        h += item.height();
+        if matches!(item, CelebItem::Entry { .. }) {
+            return h;
+        }
+    }
     h
 }
 
-/// Paginate celebration months into pages (two columns per page)
-fn paginate_celebrations(months: &[CelebrationMonth]) -> Vec<Vec<CelebrationMonth>> {
-    let header_drop = 8.0; // header moved down from top edge
-    let title_block_height = CELEB_TITLE_SIZE + 2.0 + 4.0; // title + gap + line + gap below
-    let usable_height = PAGE_HEIGHT_MM - 2.0 * CELEB_MARGIN - header_drop - title_block_height;
-    // Subsequent pages skip down the same amount to align month positions
-    let usable_height_rest = usable_height;
-    let mut pages: Vec<Vec<CelebrationMonth>> = Vec::new();
-    let mut current_page: Vec<CelebrationMonth> = Vec::new();
-    let mut col_heights = [0.0f32; 2];
-    let mut is_first_page = true;
+/// Fill a column with items, returning how many items were consumed.
+/// Ensures we never end a column with just headers and no entries beneath them.
+fn fill_column(
+    items: &[CelebItem],
+    start_idx: usize,
+    max_height: f32,
+    column: &mut Vec<CelebItem>,
+    current_month_name: &mut Option<String>,
+) -> usize {
+    let mut idx = start_idx;
+    let mut h: f32 = column.iter().map(|i| i.height()).sum();
 
-    for month in months {
-        let mh = celebration_month_height(month);
-        if mh == 0.0 {
-            continue; // skip empty months
+    while idx < items.len() {
+        let item = &items[idx];
+        let item_h = item.height();
+
+        // If column is non-empty and this item won't fit, stop
+        if h + item_h > max_height && !column.is_empty() {
+            break;
         }
 
-        let max_h = if is_first_page { usable_height } else { usable_height_rest };
-
-        // Find the shorter column
-        let target = if col_heights[0] <= col_heights[1] { 0 } else { 1 };
-
-        if col_heights[target] + mh > max_h {
-            let other = 1 - target;
-            if col_heights[other] + mh > max_h {
-                // New page
-                if !current_page.is_empty() {
-                    pages.push(current_page);
-                }
-                current_page = Vec::new();
-                col_heights = [0.0, 0.0];
-                is_first_page = false;
+        // Before adding a MonthHeader or SectionHeader, ensure there's room
+        // for it PLUS at least one Entry line. Otherwise, defer to next column.
+        if matches!(item, CelebItem::MonthHeader { .. } | CelebItem::SectionHeader(_)) && !column.is_empty() {
+            let needed = min_useful_height(items, idx);
+            if h + needed > max_height {
+                break;
             }
         }
 
-        let target = if col_heights[0] <= col_heights[1] { 0 } else { 1 };
-        col_heights[target] += mh;
-        current_page.push(CelebrationMonth {
-            month_name: month.month_name.clone(),
-            birthdays: month.birthdays.iter().map(|e| CelebrationEntry {
-                name: e.name.clone(), day: e.day, display_date: e.display_date.clone(),
-            }).collect(),
-            anniversaries: month.anniversaries.iter().map(|e| CelebrationEntry {
-                name: e.name.clone(), day: e.day, display_date: e.display_date.clone(),
-            }).collect(),
-        });
+        if let CelebItem::MonthHeader { name, .. } = item {
+            *current_month_name = Some(name.clone());
+        }
+        column.push(item.clone());
+        h += item_h;
+        idx += 1;
     }
 
-    if !current_page.is_empty() {
-        pages.push(current_page);
+    // Remove trailing MonthGap
+    if matches!(column.last(), Some(CelebItem::MonthGap)) {
+        column.pop();
     }
+
+    idx
+}
+
+/// Paginate celebration items into pages with two flowing columns per page.
+/// When a month spans into a new column, a "(Continued)" header is inserted.
+fn paginate_celebrations(months: &[CelebrationMonth], image_path: Option<PathBuf>) -> Vec<CelebPage> {
+    let title_block_height = CELEB_TITLE_SIZE * 0.4 + 8.0; // title + line + gap
+    let col_height_first = PAGE_HEIGHT_MM - CELEB_MARGIN_TOP - CELEB_MARGIN_BOTTOM - title_block_height;
+    let col_height_rest = PAGE_HEIGHT_MM - CELEB_MARGIN_TOP - CELEB_MARGIN_BOTTOM;
+
+    let items = flatten_celebrations(months);
+    let mut pages: Vec<CelebPage> = Vec::new();
+    let mut idx = 0;
+    let mut is_first = true;
+
+    while idx < items.len() {
+        let mut left: Vec<CelebItem> = Vec::new();
+        let mut right: Vec<CelebItem> = Vec::new();
+
+        let max_h = if is_first { col_height_first } else { col_height_rest };
+
+        // Fill left column
+        let mut current_month_name: Option<String> = None;
+        idx = fill_column(&items, idx, max_h, &mut left, &mut current_month_name);
+
+        // Fill right column if there are more items
+        if idx < items.len() {
+            // Check if we need a "(Continued)" header — only if the current month
+            // still has entries remaining (not just a MonthGap)
+            if let Some(ref month_name) = current_month_name {
+                if !matches!(items[idx], CelebItem::MonthHeader { .. })
+                    && has_remaining_entries(&items, idx)
+                {
+                    right.push(CelebItem::MonthHeader {
+                        name: month_name.clone(),
+                        continued: true,
+                    });
+                }
+            }
+
+            // Skip a MonthGap at the boundary (it's just spacing, not content)
+            if matches!(items.get(idx), Some(CelebItem::MonthGap)) {
+                idx += 1;
+            }
+
+            idx = fill_column(&items, idx, max_h, &mut right, &mut current_month_name);
+        }
+
+        pages.push(CelebPage {
+            left,
+            right,
+            is_first,
+            image_path: if is_first { image_path.clone() } else { None },
+        });
+        is_first = false;
+    }
+
+    // Post-process: for pages after the first, if the left column doesn't start
+    // with a MonthHeader, prepend a "(Continued)" header from the previous page.
+    for i in 1..pages.len() {
+        if !pages[i].left.is_empty() && !matches!(pages[i].left[0], CelebItem::MonthHeader { .. }) {
+            let mut last_month = None;
+            for item in pages[i - 1].right.iter().rev().chain(pages[i - 1].left.iter().rev()) {
+                if let CelebItem::MonthHeader { name, .. } = item {
+                    last_month = Some(name.clone());
+                    break;
+                }
+            }
+            if let Some(month_name) = last_month {
+                pages[i].left.insert(0, CelebItem::MonthHeader {
+                    name: month_name,
+                    continued: true,
+                });
+            }
+        }
+    }
+
     pages
 }
 
-/// Render celebration pages with a two-column layout
-fn render_celebrations(
-    _doc: &PdfDocumentReference,
+/// Render a single column of celebration items
+fn render_celeb_column(
     layer: &PdfLayerReference,
-    months: &[CelebrationMonth],
-    x_offset: f32,
-    is_first_page: bool,
-    image_path: Option<&PathBuf>,
+    items: &[CelebItem],
+    col_x: f32,
+    start_y: f32,
     font: &IndirectFontRef,
     font_bold: &IndirectFontRef,
 ) {
-    let usable_width = PAGE_WIDTH_MM - 2.0 * CELEB_MARGIN;
+    let mut y = start_y;
+    for item in items {
+        match item {
+            CelebItem::MonthHeader { name, continued } => {
+                let heading = if *continued {
+                    format!("{} (Continued)", name)
+                } else {
+                    name.clone()
+                };
+                layer.use_text(&heading, CELEB_MONTH_SIZE, Mm(col_x), Mm(y), font_bold);
+                y -= 2.0;
+                // Short accent line under month name
+                let accent_points = vec![
+                    (Point::new(Mm(col_x), Mm(y)), false),
+                    (Point::new(Mm(col_x + 20.0), Mm(y)), false),
+                ];
+                let accent_line = Line {
+                    points: accent_points,
+                    is_closed: false,
+                };
+                layer.set_outline_color(Color::Greyscale(Greyscale::new(0.7, None)));
+                layer.set_outline_thickness(0.25);
+                layer.add_line(accent_line);
+                y -= 5.0;
+            }
+            CelebItem::SectionHeader(label) => {
+                layer.use_text(label, CELEB_SECTION_SIZE, Mm(col_x), Mm(y), font_bold);
+                y -= CELEB_SECTION_SIZE * 0.4 + CELEB_SECTION_SPACING * 0.5;
+            }
+            CelebItem::Entry { display_date, name } => {
+                let date_text = format!("{}  ", display_date);
+                layer.use_text(&date_text, CELEB_TEXT_SIZE, Mm(col_x), Mm(y), font);
+                layer.use_text(name, CELEB_TEXT_SIZE, Mm(col_x + 8.0), Mm(y), font);
+                y -= CELEB_LINE_HEIGHT;
+            }
+            CelebItem::MonthGap => {
+                y -= CELEB_MONTH_SPACING;
+            }
+        }
+    }
+}
+
+/// Render celebration pages with flowing two-column layout
+fn render_celebrations(
+    _doc: &PdfDocumentReference,
+    layer: &PdfLayerReference,
+    celeb_page: &CelebPage,
+    x_offset: f32,
+    font: &IndirectFontRef,
+    font_bold: &IndirectFontRef,
+) {
+    let usable_width = PAGE_WIDTH_MM - 2.0 * CELEB_MARGIN_TOP;
     let col_width = (usable_width - CELEB_COL_GAP) / 2.0;
 
-    let mut y = PAGE_HEIGHT_MM - CELEB_MARGIN - 8.0; // Move header down from top edge
+    let mut y = PAGE_HEIGHT_MM - CELEB_MARGIN_TOP;
 
-    // Title + decorative line on first page; skip down on subsequent pages to match
-    if is_first_page {
+    if celeb_page.is_first {
         // Centered title
         let title = "Birthdays & Anniversaries";
-        let title_width = measure_helvetica_width(title, CELEB_TITLE_SIZE) * 1.07; // bold is ~7% wider
-        let title_x = x_offset + CELEB_MARGIN + (usable_width - title_width) / 2.0;
+        let title_width = measure_helvetica_width(title, CELEB_TITLE_SIZE) * 1.07;
+        let title_x = x_offset + CELEB_MARGIN_TOP + (usable_width - title_width) / 2.0;
         layer.use_text(title, CELEB_TITLE_SIZE, Mm(title_x), Mm(y), font_bold);
 
         // Header image placed just to the right of the title text
-        if let Some(img_path) = image_path {
+        if let Some(ref img_path) = celeb_page.image_path {
             if let Ok(img) = image_crate::open(img_path) {
                 use image_crate::GenericImageView;
                 let (img_w, img_h) = img.dimensions();
@@ -945,7 +1117,7 @@ fn render_celebrations(
         // Decorative line centered under title
         let line_y = y;
         let line_width = title_width * 0.8;
-        let line_start = x_offset + CELEB_MARGIN + (usable_width - line_width) / 2.0;
+        let line_start = x_offset + CELEB_MARGIN_TOP + (usable_width - line_width) / 2.0;
         let line_end = line_start + line_width;
         let points = vec![
             (Point::new(Mm(line_start), Mm(line_y)), false),
@@ -959,75 +1131,15 @@ fn render_celebrations(
         layer.set_outline_thickness(0.3);
         layer.add_line(line);
         y -= 8.0;
-    } else {
-        // On continuation pages, skip down the same amount as the title block
-        // so month names align at the same vertical position
-        y -= CELEB_TITLE_SIZE * 0.4 + 8.0;
     }
 
-    // Split months into two columns
-    let mid = (months.len() + 1) / 2;
-    let left_months = &months[..mid.min(months.len())];
-    let right_months = &months[mid.min(months.len())..];
+    // Render left column
+    let left_x = x_offset + CELEB_MARGIN_TOP;
+    render_celeb_column(layer, &celeb_page.left, left_x, y, font, font_bold);
 
-    for (col_idx, col_months) in [left_months, right_months].iter().enumerate() {
-        let col_x = x_offset + CELEB_MARGIN + col_idx as f32 * (col_width + CELEB_COL_GAP);
-        let mut col_y = y;
-
-        for month in col_months.iter() {
-            if month.birthdays.is_empty() && month.anniversaries.is_empty() {
-                continue;
-            }
-
-            // Month heading with decorative accent
-            layer.use_text(&month.month_name, CELEB_MONTH_SIZE, Mm(col_x), Mm(col_y), font_bold);
-            col_y -= 2.0;
-
-            // Short accent line under month name
-            let accent_points = vec![
-                (Point::new(Mm(col_x), Mm(col_y)), false),
-                (Point::new(Mm(col_x + 20.0), Mm(col_y)), false),
-            ];
-            let accent_line = Line {
-                points: accent_points,
-                is_closed: false,
-            };
-            layer.set_outline_color(Color::Greyscale(Greyscale::new(0.7, None)));
-            layer.set_outline_thickness(0.25);
-            layer.add_line(accent_line);
-            col_y -= 5.0;
-
-            // Birthdays section
-            if !month.birthdays.is_empty() {
-                layer.use_text("Birthdays", CELEB_SECTION_SIZE, Mm(col_x), Mm(col_y), font_bold);
-                col_y -= CELEB_SECTION_SIZE * 0.4 + CELEB_SECTION_SPACING * 0.5;
-
-                for entry in &month.birthdays {
-                    let date_text = format!("{}  ", entry.display_date);
-                    layer.use_text(&date_text, CELEB_TEXT_SIZE, Mm(col_x), Mm(col_y), font);
-                    layer.use_text(&entry.name, CELEB_TEXT_SIZE, Mm(col_x + 8.0), Mm(col_y), font);
-                    col_y -= CELEB_LINE_HEIGHT;
-                }
-                col_y -= CELEB_SECTION_SPACING;
-            }
-
-            // Anniversaries section
-            if !month.anniversaries.is_empty() {
-                layer.use_text("Anniversaries", CELEB_SECTION_SIZE, Mm(col_x), Mm(col_y), font_bold);
-                col_y -= CELEB_SECTION_SIZE * 0.4 + CELEB_SECTION_SPACING * 0.5;
-
-                for entry in &month.anniversaries {
-                    let date_text = format!("{}  ", entry.display_date);
-                    layer.use_text(&date_text, CELEB_TEXT_SIZE, Mm(col_x), Mm(col_y), font);
-                    layer.use_text(&entry.name, CELEB_TEXT_SIZE, Mm(col_x + 8.0), Mm(col_y), font);
-                    col_y -= CELEB_LINE_HEIGHT;
-                }
-                col_y -= CELEB_SECTION_SPACING;
-            }
-
-            col_y -= CELEB_MONTH_SPACING;
-        }
-    }
+    // Render right column — starts at same y as left (below title on first page)
+    let right_x = x_offset + CELEB_MARGIN_TOP + col_width + CELEB_COL_GAP;
+    render_celeb_column(layer, &celeb_page.right, right_x, y, font, font_bold);
 }
 
 fn resolve_image_page(path: &Option<String>, photos_dir: &PathBuf) -> ContentPage {
@@ -1065,14 +1177,14 @@ fn render_content_page(
             }
             render_cover_title(layer, title_line1, title_line2, title_color, x_offset, font_bold);
         }
-        ContentPage::PhotoGrid(entries) => {
-            render_photo_grid(doc, layer, entries, x_offset, font, font_bold);
+        ContentPage::PhotoGrid { entries, grid_rows } => {
+            render_photo_grid(doc, layer, entries, x_offset, font, font_bold, *grid_rows);
         }
         ContentPage::TextCards(cards) => {
             render_text_cards(layer, cards, x_offset, font, font_bold);
         }
-        ContentPage::CelebrationPages { months, is_first, image_path } => {
-            render_celebrations(doc, layer, months, x_offset, *is_first, image_path.as_ref(), font, font_bold);
+        ContentPage::CelebrationPages(celeb_page) => {
+            render_celebrations(doc, layer, celeb_page, x_offset, font, font_bold);
         }
         ContentPage::MarkdownContent(text) => {
             render_markdown(layer, text, x_offset, font, font_bold);
@@ -2157,7 +2269,7 @@ fn render_cover_title(
     }
 
     // Position title near the top of the page, below the inset
-    let start_y = PAGE_HEIGHT_MM - PAGE_BORDER_INSET - 15.0;
+    let start_y = PAGE_HEIGHT_MM - PAGE_BORDER_INSET - 40.4; // ~1 inch lower
 
     // Parse and set the title color
     let (r, g, b) = parse_hex_color(title_color);
@@ -2181,6 +2293,7 @@ fn render_photo_grid(
     x_offset: f32,
     font: &IndirectFontRef,
     font_bold: &IndirectFontRef,
+    grid_rows: usize,
 ) {
     let usable_width = PAGE_WIDTH_MM - 2.0 * GRID_MARGIN_X;
     let usable_height = PAGE_HEIGHT_MM - GRID_MARGIN_TOP - GRID_MARGIN_BOTTOM - FOOTER_Y - FOOTER_FONT_SIZE;
@@ -2188,7 +2301,7 @@ fn render_photo_grid(
     let cell_width =
         (usable_width - (GRID_COLS as f32 - 1.0) * GRID_COL_SPACING) / GRID_COLS as f32;
     let cell_height =
-        (usable_height - (GRID_ROWS as f32 - 1.0) * GRID_ROW_SPACING) / GRID_ROWS as f32;
+        (usable_height - (grid_rows as f32 - 1.0) * GRID_ROW_SPACING) / grid_rows as f32;
     // Photo area is the cell minus caption below and padding
     let photo_area_width = cell_width - 2.0 * GRID_CELL_PADDING;
     let photo_area_height =
@@ -2196,8 +2309,8 @@ fn render_photo_grid(
 
     for (i, entry) in entries.iter().enumerate() {
         // Column-major layout: fill down left column first, then right
-        let col = i / GRID_ROWS;
-        let row = i % GRID_ROWS;
+        let col = i / grid_rows;
+        let row = i % grid_rows;
 
         let cell_x = x_offset + GRID_MARGIN_X + col as f32 * (cell_width + GRID_COL_SPACING);
         let cell_top =
@@ -2243,13 +2356,14 @@ fn render_photo_grid(
             );
         }
 
-        // 2. Render caption lines below photo: bold name, then adults, then children
+        // 2. Render caption lines below photo: "LastName, Adults" then children
         let caption_top = cell_top - cell_height + GRID_CAPTION_HEIGHT;
         let caption_size = GRID_NAME_SIZE;
         let line_spacing = 3.5;
         let mut caption_y = caption_top - 2.5;
 
-        // Family last name (bold)
+        // Family last name (bold) followed by adults on the same line
+        let name_width = estimate_text_width(&entry.family_name, caption_size) * 1.07;
         layer.use_text(
             &entry.family_name,
             caption_size,
@@ -2257,15 +2371,20 @@ fn render_photo_grid(
             Mm(caption_y),
             font_bold,
         );
-        caption_y -= line_spacing;
 
-        // Adults line
         if let Some(ref adults) = entry.directory_adults {
             if !adults.is_empty() {
-                layer.use_text(adults, caption_size, Mm(rendered_img_x), Mm(caption_y), font);
-                caption_y -= line_spacing;
+                let adults_text = format!(", {}", adults);
+                layer.use_text(
+                    &adults_text,
+                    caption_size,
+                    Mm(rendered_img_x + name_width),
+                    Mm(caption_y),
+                    font,
+                );
             }
         }
+        caption_y -= line_spacing;
 
         // Children line
         if let Some(ref children) = entry.directory_children {

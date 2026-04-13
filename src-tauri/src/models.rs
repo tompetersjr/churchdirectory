@@ -250,6 +250,7 @@ pub struct PdfOptions {
     pub first_page_markdown: Option<String>,
     pub back_cover_image_path: Option<String>,
     pub celebration_image_path: Option<String>,
+    pub photo_grid_rows: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
