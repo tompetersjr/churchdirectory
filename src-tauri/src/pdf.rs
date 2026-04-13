@@ -1096,7 +1096,7 @@ fn render_celebrations(
                 let img_aspect = img_w as f32 / img_h as f32;
                 let img_render_h = CELEB_TITLE_SIZE * 1.8;
                 let img_render_w = img_render_h * img_aspect;
-                let img_x = title_x + title_width + 3.0;
+                let img_x = title_x + title_width + 6.0;
                 let img_y = y - img_render_h + CELEB_TITLE_SIZE * 0.5 + 6.0;
                 let dpi = (img_w as f32 * 25.4) / img_render_w;
                 let image_xobject = image_to_xobject_with_transparency(&img);
