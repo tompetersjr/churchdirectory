@@ -510,44 +510,48 @@ pub fn generate_pdf(
         .iter()
         .map(|fwm| {
             let mut city_state_zip_parts: Vec<String> = Vec::new();
-            if let Some(ref city) = fwm.family.city {
-                city_state_zip_parts.push(city.clone());
+            if let Some(ref city) = fwm.family.city.as_ref().filter(|s| !s.trim().is_empty()) {
+                city_state_zip_parts.push(city.to_string());
             }
-            if let Some(ref state) = fwm.family.state {
+            if let Some(ref state) = fwm.family.state.as_ref().filter(|s| !s.trim().is_empty()) {
                 if let Some(last) = city_state_zip_parts.pop() {
                     city_state_zip_parts.push(format!("{}, {}", last, state));
                 } else {
-                    city_state_zip_parts.push(state.clone());
+                    city_state_zip_parts.push(state.to_string());
                 }
             }
-            if let Some(ref zip) = fwm.family.zip {
-                city_state_zip_parts.push(zip.clone());
+            if let Some(ref zip) = fwm.family.zip.as_ref().filter(|s| !s.trim().is_empty()) {
+                city_state_zip_parts.push(zip.to_string());
             }
             let city_state_zip = if city_state_zip_parts.is_empty() {
                 None
             } else {
-                Some(city_state_zip_parts.join(" "))
+                let joined = city_state_zip_parts.join(" ");
+                let trimmed = joined.trim().trim_matches(',').trim();
+                if trimmed.is_empty() { None } else { Some(joined) }
             };
 
             // Build alt city/state/zip
             let mut alt_csz_parts: Vec<String> = Vec::new();
-            if let Some(ref city) = fwm.family.alt_city {
-                alt_csz_parts.push(city.clone());
+            if let Some(ref city) = fwm.family.alt_city.as_ref().filter(|s| !s.trim().is_empty()) {
+                alt_csz_parts.push(city.to_string());
             }
-            if let Some(ref state) = fwm.family.alt_state {
+            if let Some(ref state) = fwm.family.alt_state.as_ref().filter(|s| !s.trim().is_empty()) {
                 if let Some(last) = alt_csz_parts.pop() {
                     alt_csz_parts.push(format!("{}, {}", last, state));
                 } else {
-                    alt_csz_parts.push(state.clone());
+                    alt_csz_parts.push(state.to_string());
                 }
             }
-            if let Some(ref zip) = fwm.family.alt_zip {
-                alt_csz_parts.push(zip.clone());
+            if let Some(ref zip) = fwm.family.alt_zip.as_ref().filter(|s| !s.trim().is_empty()) {
+                alt_csz_parts.push(zip.to_string());
             }
             let alt_city_state_zip = if alt_csz_parts.is_empty() {
                 None
             } else {
-                Some(alt_csz_parts.join(" "))
+                let joined = alt_csz_parts.join(" ");
+                let trimmed = joined.trim().trim_matches(',').trim();
+                if trimmed.is_empty() { None } else { Some(joined) }
             };
 
             let members: Vec<MemberCardInfo> = fwm.members.iter().map(|m| {
