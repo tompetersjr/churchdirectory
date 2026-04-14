@@ -25,6 +25,8 @@ const GRID_CAPTION_HEIGHT: f32 = 9.0; // Space below photo for name+adults line 
 const GRID_COL_SPACING: f32 = 4.0;
 const GRID_ROW_SPACING: f32 = 0.75;
 const GRID_CELL_PADDING: f32 = 0.5;
+// Uniform aspect ratio for photo grid — matches Peters reference photo (6637 x 4427)
+const GRID_PHOTO_ASPECT: f32 = 6637.0 / 4427.0;
 
 // Text card layout
 const CARD_MARGIN: f32 = 15.0;
@@ -2323,16 +2325,40 @@ fn render_photo_grid(
         // Track rendered photo position for aligning text
         let mut rendered_img_x = cell_x + GRID_CELL_PADDING;
 
-        // 1. Render photo — fit within cell (contain, not cover)
+        // 1. Render photo — center-crop to the uniform grid aspect ratio,
+        //    then fit the cropped image within the photo area.
         if let Ok(img) = image_crate::open(&entry.photo_path) {
-            let (img_width, img_height) = image_crate::GenericImageView::dimensions(&img);
-            let img_aspect = img_width as f32 / img_height as f32;
-            let target_aspect = photo_area_width / photo_area_height;
+            use image_crate::GenericImageView;
+            let (img_width, img_height) = img.dimensions();
+            let src_aspect = img_width as f32 / img_height as f32;
 
-            let (render_w, render_h) = if img_aspect > target_aspect {
-                (photo_area_width, photo_area_width / img_aspect)
+            // Crop source to match GRID_PHOTO_ASPECT.
+            // Horizontal: center crop. Vertical: crop from the top (heads are up there).
+            let cropped = if (src_aspect - GRID_PHOTO_ASPECT).abs() > 0.001 {
+                let (crop_w, crop_h) = if src_aspect > GRID_PHOTO_ASPECT {
+                    // Source is wider — crop width
+                    let cw = (img_height as f32 * GRID_PHOTO_ASPECT) as u32;
+                    (cw, img_height)
+                } else {
+                    // Source is taller — crop height
+                    let ch = (img_width as f32 / GRID_PHOTO_ASPECT) as u32;
+                    (img_width, ch)
+                };
+                let cx = (img_width - crop_w) / 2;
+                // For vertical cropping, anchor to the top (cy = 0) to preserve heads
+                let cy = 0;
+                img.crop_imm(cx, cy, crop_w, crop_h)
             } else {
-                (photo_area_height * img_aspect, photo_area_height)
+                img
+            };
+            let (cropped_w, cropped_h) = cropped.dimensions();
+
+            // Fit the cropped image (now at GRID_PHOTO_ASPECT) within the photo area
+            let area_aspect = photo_area_width / photo_area_height;
+            let (render_w, render_h) = if GRID_PHOTO_ASPECT > area_aspect {
+                (photo_area_width, photo_area_width / GRID_PHOTO_ASPECT)
+            } else {
+                (photo_area_height * GRID_PHOTO_ASPECT, photo_area_height)
             };
 
             // Photo area starts at top of cell
@@ -2344,9 +2370,9 @@ fn render_photo_grid(
 
             rendered_img_x = img_x;
 
-            let dpi = (img_width as f32 * 25.4) / render_w;
+            let dpi = (cropped_w as f32 * 25.4) / render_w;
 
-            let image_xobject = image_to_xobject(&img);
+            let image_xobject = image_to_xobject(&cropped);
             let image = Image::from(image_xobject);
 
             image.add_to_layer(

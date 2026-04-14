@@ -377,6 +377,8 @@ pub fn preview_import(db: State<'_, Database>, file_path: String) -> Result<Impo
     }
 
     for family in families_map.values_mut() {
+        // Duplicate detection matches strictly on family_id — two families
+        // can share a last name without being duplicates.
         let existing_by_id: Option<(i64, String)> = conn
             .query_row(
                 "SELECT id, name FROM families WHERE family_id = ?",
@@ -395,26 +397,6 @@ pub fn preview_import(db: State<'_, Database>, file_path: String) -> Result<Impo
                 existing_name,
                 match_type: "id".to_string(),
             });
-        } else {
-            let existing_by_name: Option<(i64, String)> = conn
-                .query_row(
-                    "SELECT id, family_id FROM families WHERE LOWER(name) = LOWER(?)",
-                    params![family.name],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
-                )
-                .ok();
-
-            if let Some((existing_id, existing_family_id)) = existing_by_name {
-                family.is_duplicate = true;
-                family.existing_family_id = Some(existing_id);
-                duplicates.push(DuplicateMatch {
-                    import_family_id: family.family_id.clone(),
-                    import_name: family.name.clone(),
-                    existing_id,
-                    existing_name: existing_family_id,
-                    match_type: "name".to_string(),
-                });
-            }
         }
     }
 
